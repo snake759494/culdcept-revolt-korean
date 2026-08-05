@@ -97,6 +97,14 @@ python apply_ui_images.py   중간.DAT        출력/CULDCEPT.DAT  # UI 버튼 �
   (일부 xdelta 빌드는 `xdelta` 로 실행. `unknown secondary compressor` 오류가 나면
   최신 xdelta3 또는 DeltaPatcher를 쓰세요.)
 
+### 적용됐는지 확인
+
+```bash
+python verify_patch.py "<에뮬>/load/mods/00040000000F5700/romfs/CULDCEPT.DAT"
+```
+
+항목별로 O/X 를 보여줍니다. 화면이 그대로인데 전부 O 라면 파일이 아니라 **적용 경로** 문제입니다.
+
 ### 적용 결과 넣기 — LayeredFS
 
 패치된 파일을 `CULDCEPT.DAT` 이름 그대로 아래 경로에 넣고 게임을 새로 실행:

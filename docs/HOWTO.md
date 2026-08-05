@@ -208,6 +208,21 @@ def decompress(entry_bytes: bytes) -> bytes:
 주입할 때는 **0x08 무압축으로 재인코딩**하므로 커스텀 LZMA **압축기는 필요 없습니다**
 (해제만 필요).
 
+## 4-1. 패치가 들어갔는지 검사하기
+
+"분명히 패치했는데 화면이 그대로"일 때는 **게임이 실제로 읽는 파일**을 검사해 보세요.
+
+```bash
+python verify_patch.py "<에뮬>/load/mods/00040000000F5700/romfs/CULDCEPT.DAT"
+```
+
+카드 이름·덱 라벨·확인 메시지 패딩·UI 버튼 이미지·나레이션을 항목별로 O/X 로 보여줍니다.
+**전부 O 인데도 화면이 그대로라면 파일이 아니라 적용 경로 문제**입니다 — 에뮬레이터 로그에
+`LayeredFS replacement file in use for /CULDCEPT.DAT` 가 뜨는지, 실기라면 그 파일로 RomFS 를
+다시 빌드했는지 확인하세요.
+
+---
+
 ## 5. 자주 겪는 문제
 
 | 증상 | 원인 / 해결 |
