@@ -177,30 +177,36 @@ Image.fromarray(decode_rgb(raw, TS, W, H, "etc1a4")).save("check.png")
 
 ## 4. 나레이션 텍스처 (code.bin 이 필요한 부분)
 
-양피지 가이드 나레이션(`narration_ko.json`)은 **0x0d(커스텀 LZMA)** 엔트리 안에 있어서,
-푸는 데 게임 `code.bin` 기반 디코더가 필요합니다. 저작권상 `code.bin` 도, 그것에서
-파생된 디코더도 배포하지 않습니다.
-
-디코더를 직접 마련했다면 다음 인터페이스만 맞추면 됩니다.
-
-```python
-# my_decoder.py
-def decompress(entry_bytes: bytes) -> bytes:
-    """0x0d/0x8d 엔트리 → 압축 해제된 바이트"""
-```
+양피지 가이드 나레이션(`narration_ko.json`)은 **0x0d/0x8d(커스텀 LZMA)** 엔트리 안에 있어서
+푸는 데 게임 실행코드(`code.bin`)가 필요합니다. `code.bin` 은 저작권상 배포하지 않으므로
+**본인 롬에서 직접 추출**하면 됩니다 — 저장소에 추출 툴이 들어 있습니다.
 
 ```bash
-python build.py 원본.DAT 출력.DAT --font ... --narration-decoder my_decoder.py
+# ① 본인 롬에서 code.bin 추출 (복호화된 .3ds/.cci 필요)
+python extract_code.py "Culdcept Revolt (Japan).3ds" code.bin
+
+# ② 나레이션까지 포함해 빌드
+python build.py 원본.DAT 출력.DAT --font fonts/NanumSquareNeo-cBd.ttf     --narration-decoder narration_decoder.py
 ```
 
-주입 자체는 `apply_narration.py` 가 하며, **다시 쓸 때는 0x08 무압축으로 재인코딩**
-하므로 커스텀 LZMA **압축기는 필요 없습니다**(해제만 필요).
+`code.bin` 이 저장소 폴더에 없으면 환경변수 `CULDCEPT_CODE_BIN` 으로 경로를 지정하세요.
 
-> 참고: 원저자의 디코더는 `code.bin` 루틴을 Unicorn 으로 에뮬레이션하는 방식이었고,
-> 그 파일은 저작권상 배포 대상이 아닙니다. 나레이션을 뺀 1·2 단계만으로도 게임의
-> 대부분(스토리·카드·UI·버튼)이 한글로 표시됩니다.
+### 어떻게 푸는가
 
----
+`culdcept/lzma0d.py` 가 게임의 디컴프레서 함수(`0x00275080`)를 **Unicorn 으로 에뮬레이션**
+합니다. 이 압축은 비트 디코더만 표준 LZMA(11비트 확률·move 5·top 1<<24)이고 심볼 구조가
+달라서 표준 LZMA 라이브러리로는 풀리지 않습니다. 자세한 내용은
+[`FORMAT.md` §11](FORMAT.md) 참고.
+
+직접 만든 디코더를 쓰고 싶다면 인터페이스만 맞추면 됩니다.
+
+```python
+def decompress(entry_bytes: bytes) -> bytes:
+    """0x0d/0x8d 엔트리(타입 바이트 포함) → 압축 해제된 바이트"""
+```
+
+주입할 때는 **0x08 무압축으로 재인코딩**하므로 커스텀 LZMA **압축기는 필요 없습니다**
+(해제만 필요).
 
 ## 5. 자주 겪는 문제
 
@@ -217,12 +223,11 @@ python build.py 원본.DAT 출력.DAT --font ... --narration-decoder my_decoder.
 
 ## 6. 아직 안 된 것 (기여 환영)
 
-- **카드 이름 / 스펠 카드 설명 일부** — 가장 큰 미해결 과제. 1190 안의 카드명은 이미
-  한글로 바뀌지만 화면에는 원문이 나온다. 게임이 **0x0d/0x8d 엔트리에 있는 다른 사본**을
-  읽기 때문이다([`FORMAT.md` §10.2](FORMAT.md)). 아래 0x0d 디코더가 생기면 바로 풀린다.
-- **0x0d/0x8d 커스텀 LZMA 디코더** — 이게 열쇠다. 있으면 카드명·스펠 설명은 물론
-  나레이션까지 `code.bin` 없이 재현할 수 있다. 표준 LZMA 로는 풀리지 않는다
-  (고정 헤더 `41 03 04 00` + 커스텀 레인지 코더).
+- **카드 이름 / 일부 스펠 설명이 원문으로 보인다는 제보** — 원인 미확정. 전 엔트리를
+  0x0d/0x8d 까지 모두 풀고 컨테이너 섹션까지 재귀 검색한 결과, 카드명은 **엔트리 1190
+  에만** 있고 그곳은 이미 한글로 바뀝니다. 재현되면 사용 중인 패치 버전과 화면을 함께
+  이슈로 올려주세요.
 - 하단 상태 라벨(32×16 RGBA4) — 바이트 검색으로 DAT 위치를 못 찾음. §9.4 의 RGB 근사
   매칭으로 재시도해 볼 만함.
 - 소형 라벨(128×32), 퀘스트 배너(128×128), 키보드 라벨 등 나머지 텍스처.
+- 0x0d 의 **순수 파이썬 디코더**(현재는 code.bin 에뮬레이션). 있으면 롬 없이도 재현 가능.

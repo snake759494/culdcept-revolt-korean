@@ -115,6 +115,13 @@ def main(in_dat, out_dat, decode_0d):
         typ = struct.unpack("<I", d[o:o + 4])[0] & 0xff
         b = decode_0d(bytes(d[o:o + sz])) if typ in (0x0d, 0x8d) else \
             (huffman.decompress(bytes(d[o:o + sz])) if typ in (0x08, 0x0c) else bytes(d[o:o + sz]))
+        # 텍스처 일부가 압축 해제 결과의 끝을 넘어가는 엔트리가 있다(1595/1596/1601).
+        # 어차피 0x08 로 다시 써서 넣으므로, 필요한 만큼 0 으로 늘려두면 게임이 그
+        # 크기 그대로 읽는다(릴리즈 빌드와 동일한 동작).
+        need = max([ts + (128 // 4) * 64 * 16 for ts, _ in groups[128]] +
+                   [ts + (64 // 4) * 64 * 16 for ts, _ in groups[64]] + [0])
+        if need > len(b):
+            b = b + b"\x00" * (need - len(b))
         for ts, lines in groups[128]: b = inject(b, ts, lines, 128)   # 3~4줄 먼저
         for ts, lines in groups[64]:  b = inject(b, ts, lines, 64)    # 1~2줄 나중
         enc = huffman.compress(b, 0x08)                                 # 0x0d→0x08 무압축 우회
