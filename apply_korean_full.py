@@ -74,6 +74,8 @@ def main():
     block_ko = json.load(open(block_path, encoding="utf-8")) if os.path.exists(block_path) else {}
     missed_path = os.path.join(_HERE, "missed_ko.json")
     missed_ko = json.load(open(missed_path, encoding="utf-8")) if os.path.exists(missed_path) else {}
+    extra_path = os.path.join(_HERE, "cards_extra_ko.json")
+    cards_extra = json.load(open(extra_path, encoding="utf-8")) if os.path.exists(extra_path) else {}
     d = datmod.Dat(open(args.infile, "rb").read())
     cmap = fontmod.parse_cmap(huffman.decompress(d.entry(FONT_ENTRY)))
 
@@ -261,10 +263,39 @@ def main():
             enc = cardtext.encode(view, tokens, syll2code)
             if len(enc) > len(raw):
                 enc = trunc(enc, len(raw))
-            body = enc + bytes([PAD]) * (len(raw) - len(enc))
+            # 남는 자리는 **널(0x00)** 로 채운다 — 공백(0x20)이 아니다.
+            # 1190 의 문자열은 각자 널 종료이고 시작 주소로만 참조되므로, 널을 채우면
+            # 원문처럼 "내용 뒤 바로 종료" 구조가 된다. 공백으로 채우면 원문에 없던
+            # 내용이 뒤에 붙어, 문자열이 제어코드로 끝나는 경우(예: 확인 메시지의
+            # `\n\x18"4+/"`) 그 뒤 공백이 한 줄로 렌더돼 예/아니오 버튼을 화면 밖으로
+            # 밀어낸다. 가운데 정렬 문자열이 왼쪽으로 치우치는 문제도 함께 사라진다.
+            body = enc + b"\x00" * (len(raw) - len(enc))
             for off in offs:
                 ui[off:off+len(raw)] = body
                 n_card += 1
+
+    # enum_unique 필터가 놓친 문자열(오프셋 기준). cards_extra_ko.json 참고.
+    n_extra = 0
+    for off_s, spec in (cards_extra or {}).items():
+        if off_s.startswith("_"):
+            continue
+        off = int(off_s)
+        end = ui.find(b"\x00", off)                      # 원문은 널 종료
+        if end < 0:
+            continue
+        raw = bytes(ui[off:end])
+        # 안전장치: 기록된 길이와 다르면 오프셋이 틀린 것이므로 건드리지 않는다.
+        # (틀린 오프셋에 쓰면 포인터 테이블 등을 덮어써 파일이 깨진다.)
+        if len(raw) != spec["len"]:
+            print(f"  ! cards_extra 오프셋 {off} 길이 불일치"
+                  f"(기대 {spec['len']}, 실제 {len(raw)}) — 건너뜀")
+            continue
+        _, tokens = cardtext.tokenize(raw)
+        enc = cardtext.encode(spec["ko"], tokens, syll2code)
+        if len(enc) > len(raw):
+            enc = trunc(enc, len(raw))
+        ui[off:off+len(raw)] = enc + b"\x00" * (len(raw) - len(enc))
+        n_extra += 1
     def kob(t): return b"".join(wansung.encode_char(c, syll2code) for c in t)
     for jp, k in UI_KO.items():
         nb = jp.encode("shift_jis"); kb = kob(k); p = 0
@@ -341,8 +372,8 @@ def main():
     d.replace_entry(FONT_ENTRY, new_font)
     d.replace_entry(UI_ENTRY, new_ui)
     open(args.outfile, "wb").write(d.build())
-    print("스토리대사 %d + 카드 %d + 캐릭터대사 %d + UI/설정 교체 완료 -> %s"
-          % (n_ev, n_card, n_blk, args.outfile))
+    print("스토리대사 %d + 카드 %d(+보정 %d) + 캐릭터대사 %d + UI/설정 교체 완료 -> %s"
+          % (n_ev, n_card, n_extra, n_blk, args.outfile))
 
 
 if __name__ == "__main__":
