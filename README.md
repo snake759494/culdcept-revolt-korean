@@ -17,6 +17,16 @@ Bold**로 렌더링합니다.
 텍스처**(시나리오 컨테이너 안에 저장)여서, 3DS 텍스처 포맷을 규명해 한글을 직접
 렌더·주입했습니다(에뮬레이터 텍스처 교체가 아니라 DAT 자체를 수정 — 실기에서도 동작).
 
+**v1.8부터는 UI 버튼 이미지까지 한글화**합니다 — 타이틀/맵 세로 메뉴(퀘스트·혼자서
+대전·북·상점·설정·종료 등), 덱 편집 카드 필터(크리처·아이템·스펠·전부·자동 선택),
+배틀/맵 커맨드 버튼(영지·지도·정보·설정·종료·뒤로·아이템 없음·설명서·중단·사령·비술).
+이 버튼들은 글자까지 통째로 그려진 **ETC1 텍스처**라 색까지 다시 인코딩해야 해서,
+3DS ETC1 디코더·인코더를 직접 구현했습니다(`culdcept/etc1.py`).
+
+**이 저장소만으로 처음부터 직접 빌드할 수 있습니다** — 본인의 `CULDCEPT.DAT` 하나만
+있으면 `python build.py` 한 줄로 텍스트·UI 이미지 패치가 전부 재현됩니다.
+자세한 절차·새 번역 추가·새 아틀라스 찾는 법은 **[`docs/HOWTO.md`](docs/HOWTO.md)** 참고.
+
 ## ⚠️ 먼저 읽어주세요
 
 - **게임 콘텐츠는 포함되어 있지 않습니다.** ROM, `CULDCEPT.DAT`, 실행 파일, 스토리
@@ -53,12 +63,19 @@ Bold**로 렌더링합니다.
 대체됩니다.
 
 ```bash
-pip install pillow
-# 전체 스토리 대사 + UI:
-python apply_korean_full.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT
+pip install pillow numpy
+# 통합 빌드(권장) — 텍스트 + UI 버튼 이미지를 한 번에:
+python build.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT --font fonts/NanumSquareNeo-cBd.ttf
+
+# 단계별로 하고 싶다면:
+python apply_korean_full.py 원본/CULDCEPT.DAT 중간.DAT   # 대사·카드·UI 텍스트
+python apply_ui_images.py   중간.DAT        출력/CULDCEPT.DAT  # UI 버튼 이미지
 # (오프닝만 원하면 apply_korean_opening.py)
-# 폰트 지정:  --font <TTF 경로>
 ```
+
+`build.py` 에 `--xdelta out.xdelta` 를 주면 배포용 diff 패치도 만듭니다.
+나레이션 텍스처까지 재현하려면 `--narration-decoder` 가 필요합니다
+([`docs/HOWTO.md` §4](docs/HOWTO.md) — 게임 `code.bin` 이 필요한 유일한 단계).
 
 `apply_korean_full.py` 는 본인 파일에서 대사·UI 위치를 찾아, `dialogue_ko.json`(한국어
 번역만 담김, 일본어 원문 없음)의 번역으로 교체합니다. 게임이 대사를 절대 오프셋으로
@@ -102,18 +119,24 @@ python apply_korean_full.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT
   `(섹션 오프셋, 크기)` 헤더로 시작하는 컨테이너이며, 각 섹션은 `0x08` 압축.
   대사 섹션은 `[스크립트][텍스트]` 구조, 텍스트는 null 종료 이벤트의 연속
   (`0x07`=페이지, `0x0a`=줄바꿈, `03 30 2f`=이름 삽입).
+- **UI 버튼 아틀라스 (v1.8)** — 메뉴·필터·커맨드 버튼은 글자까지 통째로 그려진
+  **ETC1/ETC1A4 텍스처**(엔트리 711·608·962). 3DS 는 ETC1 블록을 **u64 리틀엔디언**
+  (=표준의 바이트 역순)으로 저장한다는 점을 규명해 디코더·인코더를 구현하고
+  (`culdcept/etc1.py`), 원문을 지운 뒤 한글을 렌더해 **바뀐 블록만** 재인코딩한다.
+  세 엔트리 모두 huffman 이라 `code.bin` 없이 완전 재현된다.
 - **나레이션 텍스처 (v1.7)** — 양피지 가이드 나레이션은 시나리오 컨테이너 안에
   헤더 없이 저장된 **256×64/256×128 ETC1A4 텍스처**. 3DS 스위즐(8×8 타일 morton) +
   ETC1A4(알파 A4 + 색 ETC1) 구조를 규명해, 알파만 한글로 교체하고 색은 균일 진회색으로
   설정해 원본과 같은 스타일로 렌더한다. 겹쳐 저장된 다른 텍스처를 깨지 않도록 한글
   잉크가 있는 행까지만 덮고, 각 줄은 원본 잉크의 가로 중심에 맞춰 배치한다.
 
-자세한 내용은 [`docs/FORMAT.md`](docs/FORMAT.md) 참고.
+포맷 상세는 [`docs/FORMAT.md`](docs/FORMAT.md), 직접 빌드·번역 추가 방법은
+[`docs/HOWTO.md`](docs/HOWTO.md) 참고.
 
 ## 라이브러리
 
 ```python
-from culdcept import huffman, dat, font, scen, wansung
+from culdcept import huffman, dat, font, scen, wansung, etc1
 d = dat.Dat(open("CULDCEPT.DAT", "rb").read())
 raw = huffman.decompress(d.entry(1054))     # -> 압축 해제된 폰트 리소스
 ```
@@ -124,6 +147,8 @@ raw = huffman.decompress(d.entry(1054))     # -> 압축 해제된 폰트 리소�
 - `cards_ko.json` / `block_ko.json` / `missed_ko.json` — 카드 텍스트 / 캐릭터 전투 대사 /
   놓쳤던 중간 텍스트·한자 라벨의 한국어.
 - `opening_ko.py` — 오프닝 대사(다듬은 버전) + UI/시작설정 라벨 한국어.
+- `ui_images_ko.json` — **UI 버튼 이미지**의 한국어 + 좌표(아틀라스별 엔트리·TS·크기,
+  라벨별 지울 영역·그릴 위치·폰트 크기·색·지우기 방식). `apply_ui_images.py` 로 주입.
 - `narration_ko.json` — **양피지 가이드 나레이션**의 한국어(엔트리·오프셋·크기별,
   256×64 35종 + 256×128 12종). `apply_narration.py`로 텍스처에 렌더·주입.
   (0x0d 엔트리 디코드에 게임 `code.bin`이 필요 — 저작권상 미배포, 각자 롬에서 추출.)
