@@ -107,6 +107,32 @@ def main():
             out += bs[i:i+step]; i += step
         return bytes(out)
 
+    def pad_fill(view, tokens, syll2code, enc, target):
+        """번역 결과를 원문 바이트 길이에 맞춰 **공백(0x20)** 으로 채운다.
+
+        널이 아니라 공백을 쓰는 이유: 게임은 카드 레코드의 필드를 널로 구분된
+        순서대로 읽으므로, 널을 더 넣으면 빈 세그먼트가 생겨 뒤 필드가 밀린다.
+
+        채우는 위치가 중요하다. 문자열이 제어코드로 끝나는데 공백을 맨 뒤에 붙이면,
+        예/아니오 버튼을 화면 밖으로 밀어낸다. 그래서 뒤쪽 12자 안에 줄바꿈이나
+        토큰이 있으면 **그 앞에** 채워 넣는다(눈에 보이지 않는 자리).
+        """
+        need = target - len(enc)
+        if need <= 0:
+            return enc
+        cut = None
+        for i in range(len(view) - 1, max(-1, len(view) - 13), -1):
+            if view[i] == chr(10) or view[i] == cardtext.L:
+                cut = i
+                break
+        if cut is None:                       # 평범한 문장 → 그냥 뒤에 채움
+            return enc + bytes([PAD]) * need
+        padded = view[:cut] + " " * need + view[cut:]
+        out = cardtext.encode(padded, tokens, syll2code)
+        if len(out) == target:
+            return out
+        return enc + bytes([PAD]) * need      # 길이가 안 맞으면 안전하게 원래 방식
+
     def fit_page(view, tokens, budget):
         """예산 초과 시: 끝쪽 공백부터 제거 → 그래도 넘으면 안전 절단(문자경계 보존)."""
         enc = cardtext.encode(view, tokens, syll2code)
@@ -192,7 +218,7 @@ def main():
         secs = scen.parse_sections(ent)
         if not secs:
             continue
-        # 비압축(raw) 섹션의 미번역(예: 1947.s2 퀘스트 제목·노드명) — 제자리 교체(null 패딩)
+        # 비압축(raw) 섹션의 미번역(예: 1947.s2 퀘스트 제목·노드명) — 제자리 교체(공백 패딩)
         ent = bytearray(ent)
         for k, (off, ln) in enumerate(secs):
             mm = missed_ko.get(f"{idx}.r{k}", {})
@@ -206,7 +232,9 @@ def main():
                 bud = end - so
                 _, tokens = cardtext.tokenize(bytes(ent[so:end]))
                 enc = fit_page(pages[0], tokens, bud)
-                ent[so:end] = enc + b"\x00" * (bud - len(enc))
+                # 공백(0x20)으로 채운다 — 널을 채우면 빈 세그먼트가 생겨
+                # [제목][설명][노드명…] 순서로 읽는 퀘스트 데이터가 밀린다(이슈 #3).
+                ent[so:end] = enc + bytes([PAD]) * (bud - len(enc))
         ent = bytes(ent)
         cont = ent
         for k, (off, ln) in enumerate(secs):
@@ -263,13 +291,16 @@ def main():
             enc = cardtext.encode(view, tokens, syll2code)
             if len(enc) > len(raw):
                 enc = trunc(enc, len(raw))
-            # 남는 자리는 **널(0x00)** 로 채운다 — 공백(0x20)이 아니다.
-            # 1190 의 문자열은 각자 널 종료이고 시작 주소로만 참조되므로, 널을 채우면
-            # 원문처럼 "내용 뒤 바로 종료" 구조가 된다. 공백으로 채우면 원문에 없던
-            # 내용이 뒤에 붙어, 문자열이 제어코드로 끝나는 경우(예: 확인 메시지의
-            # `\n\x18"4+/"`) 그 뒤 공백이 한 줄로 렌더돼 예/아니오 버튼을 화면 밖으로
-            # 밀어낸다. 가운데 정렬 문자열이 왼쪽으로 치우치는 문제도 함께 사라진다.
-            body = enc + b"\x00" * (len(raw) - len(enc))
+            # 남는 자리는 **공백(0x20)** 으로 채운다 — 널(0x00)이 아니다.
+            # 널로 채우면 문자열이 일찍 끝나 **빈 세그먼트가 새로 생긴다**. 게임은
+            # 카드 레코드의 필드(이름·능력치·영문명·플레이버)를 널로 구분된 순서대로
+            # 읽으므로, 빈 세그먼트가 끼면 뒤 필드가 전부 밀려 설명문이 비어 보인다
+            # (이슈 #3). 원본의 널 개수를 그대로 유지해야 한다.
+            #
+            # 다만 문자열이 제어코드로 끝나면 공백을 뒤에 붙일 때 그 공백이 한 줄로
+            # 렌더돼 예/아니오 버튼을 밀어낸다(이슈 #1). 그래서 pad_fill() 이
+            # **제어코드 앞쪽에** 채워 넣는다.
+            body = pad_fill(view, tokens, syll2code, enc, len(raw))
             for off in offs:
                 ui[off:off+len(raw)] = body
                 n_card += 1
@@ -294,7 +325,7 @@ def main():
         enc = cardtext.encode(spec["ko"], tokens, syll2code)
         if len(enc) > len(raw):
             enc = trunc(enc, len(raw))
-        ui[off:off+len(raw)] = enc + b"\x00" * (len(raw) - len(enc))
+        ui[off:off+len(raw)] = pad_fill(spec["ko"], tokens, syll2code, enc, len(raw))
         n_extra += 1
     def kob(t): return b"".join(wansung.encode_char(c, syll2code) for c in t)
     for jp, k in UI_KO.items():

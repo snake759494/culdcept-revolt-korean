@@ -80,7 +80,8 @@ def main():
             dec = _load(a.narration_decoder)
             if not hasattr(dec, "decompress"):
                 sys.exit("디코더 모듈에 decompress(bytes)->bytes 가 없습니다.")
-            os.environ.setdefault("KR_FONT", a.font or "")
+            if a.font:                       # 빈 문자열을 넣으면 기본 경로가
+                os.environ["KR_FONT"] = a.font   # 무력화되므로 지정됐을 때만 설정
             import apply_narration
             stage_out = os.path.join(tmpd, "s3.DAT")
             apply_narration.main(stage_in, stage_out, dec.decompress)

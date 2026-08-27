@@ -22,7 +22,7 @@ from culdcept import huffman
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TTF  = os.environ.get("KR_FONT", os.path.join(HERE, "fonts", "NanumSquareNeoBold.ttf"))
+TTF  = os.environ.get("KR_FONT", os.path.join(HERE, "fonts", "NanumSquareNeo-cBd.ttf"))
 tpr  = 32
 FLAT = bytes.fromhex("3333330000000000")   # 균일 진회색 ETC1 색 블록(#353535)
 _m   = ImageDraw.Draw(Image.new("L", (8, 8)))
