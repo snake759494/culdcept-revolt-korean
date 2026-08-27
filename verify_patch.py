@@ -86,13 +86,17 @@ def main(path):
     e3, off3, size3 = PROBE_UI_LABEL
     report("덱 편집 라벨 한글화", is_hangul_bytes(ui[off3:off3 + size3]))
     tails = [ui[o2 + l - 1] for _, o2, l in CONFIRM_MSGS]
+    # 원문은 제어코드 "/"(0x2F) 로 끝난다. 번역문이 짧을 때 그 **뒤에** 뭔가를
+    # 채우면(공백이든 널이든) 화면에 한 줄이 더 생겨 예/아니오 버튼이 밀린다.
+    # 올바른 패치는 제어코드 앞쪽을 채워 원문처럼 0x2F 로 끝난다.
     if all(t == 0x2F for t in tails):
-        report("확인 메시지 패딩 (예/아니오 밀림)", False, "미패치 파일")
-    elif all(t == 0x00 for t in tails):
-        report("확인 메시지 패딩 (예/아니오 밀림)", True, "v1.9 이상 — 수정됨")
+        report("확인 메시지 끝처리 (예/아니오 밀림)", True, "제어코드로 끝남 — 정상")
+    elif all(t == 0x20 for t in tails):
+        report("확인 메시지 끝처리 (예/아니오 밀림)", False,
+               "뒤에 공백이 붙음(v1.8 이하) — 버튼이 화면 밖으로 밀림")
     else:
-        report("확인 메시지 패딩 (예/아니오 밀림)", False,
-               "v1.8 이하 — 예/아니오가 화면 밖으로 밀림")
+        report("확인 메시지 끝처리 (예/아니오 밀림)", False,
+               "뒤에 널이 붙음(v1.9~v2.0) — 버튼 밀림 + 카드 설명이 비어 보임")
 
     # ── UI 버튼 이미지 ──────────────────────────────
     print("\n■ UI 버튼 이미지 (v1.8 이상)")
