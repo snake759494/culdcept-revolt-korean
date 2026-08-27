@@ -121,11 +121,16 @@ def main():
         if need <= 0:
             return enc
         cut = None
-        for i in range(len(view) - 1, max(-1, len(view) - 13), -1):
-            if view[i] == chr(10) or view[i] == cardtext.L:
-                cut = i
-                break
-        if cut is None:                       # 평범한 문장 → 그냥 뒤에 채움
+        # 뒤쪽 12자 안의 **줄바꿈**만 대상으로 하고, 그마저도 뒤에 실제 글자가
+        # 없을 때만 그 앞에 채운다. 토큰까지 대상으로 삼으면 '강타[   (아이콘)]'
+        # 처럼 괄호 안에 공백이 끼어 보기 나쁘다.
+        for i in range(max(0, len(view) - 12), len(view)):
+            if view[i] == chr(10):
+                tail = view[i:]
+                if not any("가" <= c <= "힣" for c in tail):
+                    cut = i
+                    break
+        if cut is None:                    # 평범한 문장 → 그냥 뒤에 채움
             return enc + bytes([PAD]) * need
         padded = view[:cut] + " " * need + view[cut:]
         out = cardtext.encode(padded, tokens, syll2code)
