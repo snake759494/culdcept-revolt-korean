@@ -214,9 +214,12 @@ def decompress(entry_bytes: bytes) -> bytes:
 
 ```bash
 python verify_patch.py "<에뮬>/load/mods/00040000000F5700/romfs/CULDCEPT.DAT"
+python check_structure.py 원본.DAT 패치본.DAT      # 널 구분 구조 검사(필수)
 ```
 
-카드 이름·덱 라벨·확인 메시지 패딩·UI 버튼 이미지·나레이션을 항목별로 O/X 로 보여줍니다.
+앞은 항목별 적용 여부, 뒤는 **널 구분 구조**가 원본과 같은지 봅니다. 뒤쪽이 X 면
+카드 설명이 비어 보이거나 퀘스트가 밀리므로 반드시 확인하세요
+([`FORMAT.md` §12](FORMAT.md)).
 **전부 O 인데도 화면이 그대로라면 파일이 아니라 적용 경로 문제**입니다 — 에뮬레이터 로그에
 `LayeredFS replacement file in use for /CULDCEPT.DAT` 가 뜨는지, 실기라면 그 파일로 RomFS 를
 다시 빌드했는지 확인하세요.
