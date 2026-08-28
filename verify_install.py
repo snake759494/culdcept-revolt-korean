@@ -26,6 +26,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from culdcept import huffman
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -36,6 +38,8 @@ CATALOG_NAME = "ContentInfoArchive_JPN_ja.bin"
 EXPECTED_CATALOG_SIZE = 21_808
 EXPECTED_CATALOG_COUNT = 108
 EXPECTED_DIRECT_IPS = 108
+BASE_CARD_PROBES = ((84608, 16), (103135, 12), (183653, 6))
+BASE_CONFIRM_TAILS = ((211679, 31), (211711, 29))
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,25 @@ def _find_path(root: Path, *parts: str) -> Path | None:
     return current
 
 
+def _is_hangul_probe(value: bytes) -> bool:
+    """Check the fixed Wansung codes used by the Korean font mapping."""
+
+    if len(value) < 2:
+        return False
+    count = 0
+    index = 0
+    while index + 1 < len(value):
+        code = (value[index] << 8) | value[index + 1]
+        if 0x889F <= code <= 0x9872:
+            count += 1
+            index += 2
+        elif value[index] in (0x00, 0x20):
+            index += 1
+        else:
+            return False
+    return count > 0
+
+
 def _check_base(user_dir: Path) -> Check:
     path = _find_path(user_dir, "load", "mods", BASE_TITLE_ID, "romfs", "CULDCEPT.DAT")
     if path is None or not path.is_file():
@@ -83,6 +106,27 @@ def _check_base(user_dir: Path) -> Check:
     detail = f"{size:,}바이트: {path}"
     if size != 300_005_903:
         detail += " (재빌드한 폰트에 따라 크기는 달라질 수 있음)"
+    try:
+        data = path.read_bytes()
+        table_size = struct.unpack_from("<I", data, 0)[0]
+        entry_count = table_size // 8
+        if entry_count <= 1190:
+            return Check("본편 CULDCEPT.DAT", "X", detail + " / 카드 DB 엔트리 1190 없음", True)
+        entry_offset, entry_size = struct.unpack_from("<II", data, 1190 * 8)
+        compressed = data[entry_offset:entry_offset + entry_size]
+        ui = huffman.decompress(compressed)
+        probes_ok = all(_is_hangul_probe(ui[offset:offset + length]) for offset, length in BASE_CARD_PROBES)
+        tails_ok = all(ui[offset + length - 1] == 0x2F for offset, length in BASE_CONFIRM_TAILS)
+    except (OSError, IndexError, struct.error, ValueError, NotImplementedError) as exc:
+        return Check("본편 CULDCEPT.DAT", "X", detail + f" / 카드 DB 검사 실패: {exc}", True)
+    if not probes_ok or not tails_ok:
+        return Check(
+            "본편 CULDCEPT.DAT",
+            "X",
+            detail + " / 본편 카드·확인 메시지 한글화 probe 불일치",
+            True,
+        )
+    detail += " / 카드·확인 메시지 한글화 probe 통과"
     return Check("본편 CULDCEPT.DAT", "O", detail)
 
 
