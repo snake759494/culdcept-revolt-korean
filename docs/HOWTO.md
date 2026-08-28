@@ -59,17 +59,18 @@ python build.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT \
 정상 적용 시 로그에 `LayeredFS replacement file in use for /CULDCEPT.DAT` 가 뜹니다.
 실기는 이 파일로 RomFS 를 재빌드해 ROM/CIA 를 만드세요.
 
-### DLC 한글화 (이슈 #8 / #13 / v2.8)
+### 본편 + DLC 통합 배포 (이슈 #8 / #13 / v2.9)
 
-#### 일반 사용자: 릴리즈 ZIP만 복사
+#### 일반 사용자: v2.9 통합 ZIP
 
-plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [v2.8
-릴리즈 ZIP](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.8/culdcept-dlc-korean-v2.8.zip)을
-받아 압축을 푼 뒤, 안의 `load` 폴더를 Azahar 사용자 폴더(보통
+plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [v2.9
+통합 ZIP](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.9/culdcept-korean-complete-v2.9.zip)을
+받습니다. 안의 `culdcept-korean.xdelta`를 본인이 추출한 일본판 Rev 2
+`CULDCEPT.DAT`에 적용해 본편 패치본을 만들고, `load` 폴더는 Azahar 사용자 폴더(보통
 `C:\Users\<윈도우 계정>\AppData\Roaming\Azahar\`)에 병합하면 됩니다.
 
-v2.8에는 수정된 직접 리소스 IPS 108개가 구형 v2.4/v2.6과 같은 이름으로 모두 들어
-있습니다. 기존 폴더에 그대로 병합하면 손상된 IPS가 빠짐없이 덮어써집니다. v2.7은
+v2.9에는 v2.8에서 수정한 직접 리소스 IPS 108개가 구형 v2.4/v2.6과 같은 이름으로
+모두 들어 있습니다. 기존 폴더에 그대로 병합하면 손상된 IPS가 빠짐없이 덮어써집니다. v2.7은
 `romfs_ext`를 넣지 않은 과거 진단용이라 기존 폴더에 병합해도 구형 IPS가 남으므로
 사용하지 마세요.
 
@@ -136,8 +137,8 @@ python verify_dlc_patch.py DLC-000f5700 \
 #### 부팅은 되지만 DLC·카드가 그대로일 때 (이슈 #11)
 
 v2.5에서 부팅은 되지만 DLC 제목이 그대로인 것은 정상입니다. v2.5에는 카탈로그만 있고
-직접 리소스 IPS가 없기 때문입니다. v2.8 전체 패키지를 기존 v2.5 DLC 모드 폴더에
-병합하세요.
+직접 리소스 IPS가 없기 때문입니다. v2.9 통합 패키지의 본편 xdelta를 적용하고 `load`
+폴더를 기존 v2.5 DLC 모드 폴더에 병합하세요.
 
 카드 설명은 DLC가 아니라 본편 `CULDCEPT.DAT`의 카드 DB에서 읽습니다. 본편 패치가
 다음 위치에 있는지 확인해야 합니다.
@@ -333,10 +334,12 @@ def decompress(entry_bytes: bytes) -> bytes:
 
 ```bash
 python verify_patch.py "<에뮬>/load/mods/00040000000F5700/romfs/CULDCEPT.DAT"
+python verify_cards.py 원본.DAT "<에뮬>/load/mods/00040000000F5700/romfs/CULDCEPT.DAT"
 python check_structure.py 원본.DAT 패치본.DAT      # 널 구분 구조 검사(필수)
 ```
 
-앞은 항목별 적용 여부, 뒤는 **널 구분 구조**가 원본과 같은지 봅니다. 뒤쪽이 X 면
+첫 명령은 대표 적용 지점, 둘째는 **카드 449장 전 필드**, 셋째는 전체 널 구분 구조가
+원본과 같은지 봅니다. 뒤쪽이 X 면
 카드 설명이 비어 보이거나 퀘스트가 밀리므로 반드시 확인하세요
 ([`FORMAT.md` §12](FORMAT.md)).
 **전부 O 인데도 화면이 그대로라면 파일이 아니라 적용 경로 문제**입니다 — 에뮬레이터 로그에
@@ -358,12 +361,11 @@ python check_structure.py 원본.DAT 패치본.DAT      # 널 구분 구조 검�
 
 ---
 
-## 6. 아직 안 된 것 (기여 환영)
+## 6. 추가 작업 후보 (기여 환영)
 
-- **카드 이름 / 일부 스펠 설명이 원문으로 보인다는 제보** — 원인 미확정. 전 엔트리를
-  0x0d/0x8d 까지 모두 풀고 컨테이너 섹션까지 재귀 검색한 결과, 카드명은 **엔트리 1190
-  에만** 있고 그곳은 이미 한글로 바뀝니다. 재현되면 사용 중인 패치 버전과 화면을 함께
-  이슈로 올려주세요.
+- **카드 DB는 완료** — 수집 카드 449장의 표시 이름·능력·플레이버·용어·전략을
+  `verify_cards.py`로 원본과 전수 대조했고, 미번역 일본어 필드와 널 오프셋 불일치는
+  모두 0입니다. 자세한 결과는 [`CARD_AUDIT.md`](CARD_AUDIT.md)를 참고하세요.
 - 하단 상태 라벨(32×16 RGBA4) — 바이트 검색으로 DAT 위치를 못 찾음. §9.4 의 RGB 근사
   매칭으로 재시도해 볼 만함.
 - 소형 라벨(128×32), 퀘스트 배너(128×128), 키보드 라벨 등 나머지 텍스처.

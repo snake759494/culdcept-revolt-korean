@@ -21,6 +21,9 @@ import sys
 
 from culdcept import huffman, scen
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 CARD_ENTRY = 1190
 QUEST_ENTRIES = range(1946, 1960)
 
