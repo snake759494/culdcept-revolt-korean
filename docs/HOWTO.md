@@ -59,19 +59,21 @@ python build.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT \
 정상 적용 시 로그에 `LayeredFS replacement file in use for /CULDCEPT.DAT` 가 뜹니다.
 실기는 이 파일로 RomFS 를 재빌드해 ROM/CIA 를 만드세요.
 
-### DLC 한글화 (이슈 #8 / v2.4)
+### DLC 한글화 (이슈 #8 / #13 / v2.8)
 
 #### 일반 사용자: 릴리즈 ZIP만 복사
 
-plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [v2.6
-릴리즈 ZIP](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.6/culdcept-dlc-korean-v2.6.zip)을
+plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [v2.8
+릴리즈 ZIP](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.8/culdcept-dlc-korean-v2.8.zip)을
 받아 압축을 푼 뒤, 안의 `load` 폴더를 Azahar 사용자 폴더(보통
 `C:\Users\<윈도우 계정>\AppData\Roaming\Azahar\`)에 병합하면 됩니다.
 
-v2.5는 프리징 원인을 분리하기 위한 카탈로그 전용 진단 패키지였기 때문에 직접 DLC
-제목이 바뀌지 않습니다. DLC 화면까지 번역하려면 v2.6 전체 패키지를 사용하세요.
+v2.8에는 수정된 직접 리소스 IPS 108개가 구형 v2.4/v2.6과 같은 이름으로 모두 들어
+있습니다. 기존 폴더에 그대로 병합하면 손상된 IPS가 빠짐없이 덮어써집니다. v2.7은
+`romfs_ext`를 넣지 않은 과거 진단용이라 기존 폴더에 병합해도 구형 IPS가 남으므로
+사용하지 마세요.
 
-본편 v2.2 파일과 DLC v2.6 파일은 타이틀 ID가 다릅니다. 다음처럼 배치해야 합니다.
+본편과 DLC 파일은 타이틀 ID가 다릅니다. 다음처럼 배치해야 합니다.
 
 ```text
 Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
@@ -88,10 +90,16 @@ Azahar\load\mods\0004008c000f5700\romfs_ext\dice_simple_blue.dld.ips
 
 DLC는 본편과 다른 타이틀 ID(`0004008c000f5700`)를 사용합니다. 첨부된 DLC 덤프처럼
 `.app` 파일이 있는 폴더를 입력하면 스크립트가 plaintext RomFS의 카탈로그와 직접 DLC
-리소스를 찾아 108개 레코드의 제목·설명을 교체합니다. v2.3은 카탈로그만 바꿨지만,
-실제 다이스·맵·퀘스트·북·책 표지·아바타 선택 화면은 각 `.dld`·`.dlm`·`.dlq`·`.dlb`·
-`.dlj`·`.dla` 파일의 헤더 제목을 읽으므로 v2.4는 그 부분을 `romfs_ext` IPS로 함께
-패치합니다. 원본 DLC 데이터는 읽기만 하며 저장소에는 들어 있지 않습니다.
+리소스를 찾아 108개 레코드의 제목·설명을 교체합니다. 실제 다이스·맵·퀘스트·북·책
+표지·아바타 선택 화면은 각 `.dld`·`.dlm`·`.dlq`·`.dlb`·`.dlj`·`.dla` 파일의 헤더
+제목을 읽으므로 그 부분도 `romfs_ext` IPS로 패치합니다. 원본 DLC 데이터는 읽기만 하며
+저장소에는 들어 있지 않습니다.
+
+직접 리소스 제목 영역은 `0x10..0x2A`의 27바이트입니다. `0x2B`는 암호화된 페이로드
+시작 오프셋이므로 절대 변경하면 안 됩니다. 구형 v2.4/v2.6은 제목 크기를 32바이트로
+잘못 잡아 이 값을 지웠고, 52바이트 아바타에서 `0x34-0x80=0xFFFFFFB4` 길이 언더플로를
+일으켰습니다. 현재 생성기와 검증기는 제목 뒤 모든 바이트 보존과 복호화 범위를 각각
+독립적으로 검사합니다.
 
 직접 리소스 제목도 본편 v2.2 패치가 설치한 고정 완성형 폰트 매핑을 사용하므로, 먼저
 본편 `CULDCEPT.DAT`를 패치해 둡니다.
@@ -123,15 +131,13 @@ python verify_dlc_patch.py DLC-000f5700 \
 ```
 
 이슈 #8의 다이스·퀘스트 제목이 그대로라면 `romfs_ext` 폴더까지 병합했는지, 게임을
-완전히 재시작했는지 확인하세요. Azahar/Citra 계열의 타이틀별 모드 경로는 공식
-[Game Modding 안내](https://citra.azahar-emu.org/help/feature/game-modding/)를
-참고할 수 있습니다.
+완전히 재시작했는지 확인하세요.
 
 #### 부팅은 되지만 DLC·카드가 그대로일 때 (이슈 #11)
 
 v2.5에서 부팅은 되지만 DLC 제목이 그대로인 것은 정상입니다. v2.5에는 카탈로그만 있고
-직접 리소스 IPS가 없기 때문입니다. [v2.6 전체 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.6/culdcept-dlc-korean-v2.6.zip)를
-받아 기존 v2.5 DLC 모드 폴더와 교체하세요.
+직접 리소스 IPS가 없기 때문입니다. v2.8 전체 패키지를 기존 v2.5 DLC 모드 폴더에
+병합하세요.
 
 카드 설명은 DLC가 아니라 본편 `CULDCEPT.DAT`의 카드 DB에서 읽습니다. 본편 패치가
 다음 위치에 있는지 확인해야 합니다.
@@ -143,26 +149,12 @@ Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
 저장소의 `verify_install.cmd`를 더블클릭하면 기본 `%APPDATA%\Azahar` 경로를 읽기 전용으로
 검사할 수 있습니다.
 
-#### v2.6에서 다시 프리징될 때 (이슈 #12)
+#### `SD카드를 확인 중입니다...`에서 멈출 때 (이슈 #10/#12/#13)
 
-이슈 #12 로그에서는 본편 DAT와 DLC 카탈로그는 읽혔지만 카탈로그 접근이 반복된 뒤 게임
-프로세스가 정리되었습니다. v2.6의 직접 리소스 IPS와 DLC/SD 환경을 분리하려면
-[v2.7 호환 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.7/culdcept-dlc-korean-v2.7-safe.zip)를
-사용하세요. 이 패키지는 카탈로그만 포함하므로 카드·본편 번역은 유지하지만 DLC 직접
-제목은 원문으로 남습니다.
-
-기존 DLC 모드 폴더를 다른 곳으로 옮긴 뒤 v2.7 ZIP의 `load` 폴더를 사용자 폴더에
-병합하고, 본편 `CULDCEPT.DAT`는 그대로 둔 채 게임을 다시 실행합니다. v2.7의 진단기는
-`config\qt-config.ini`에 지정된 `sdmc_directory`와 `azahar_log.old.txt` 같은 회전 로그도
-검사합니다. 호환 패키지에서도 멈추면 진단기 출력과 회전 로그를 이슈에 남겨 주세요.
-
-#### `SD카드를 확인 중입니다...`에서 멈출 때 (이슈 #10)
-
-이 화면에서 0 FPS가 되면 v2.4 직접 리소스 IPS와 Azahar의 SD/DLC 환경을 분리해서
-확인하세요. [v2.5 호환 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.5/culdcept-dlc-korean-v2.5-compat.zip)는
-직접 리소스 IPS를 제외하고 카탈로그만 적용합니다. 기존 v2.4의
-`load\mods\0004008c000f5700` 폴더는 삭제하지 말고 잠시 다른 위치로 옮긴 뒤, v2.5의
-`load` 폴더를 사용자 폴더에 병합하세요.
+#13 로그의 `PC 0x00122204` 미매핑 메모리 루프는 구형 직접 IPS가 `0x2B`를 덮은
+패턴입니다. v2.8의 `load` 폴더를 병합해 108개 IPS를 모두 덮어쓴 뒤 Azahar를 완전히
+종료하고 게임을 새로 부팅하세요. 카탈로그 전용 v2.5/v2.7로 소거 테스트할 필요가
+없습니다.
 
 번역 ZIP은 DLC 본체가 아니므로, Azahar의 가상 SD에 본인 소유 DLC가 다음 위치로
 설치되어 있어야 합니다.
@@ -181,9 +173,9 @@ python verify_install.py "<Azahar 사용자 폴더>"
 
 또는 `verify_install.cmd`를 더블클릭하세요.
 
-호환 패키지에서도 멈추면 `verify_install.py` 결과와 `Azahar\log\azahar_log.txt`의
-마지막 로그를 이슈에 남겨 주세요. 카탈로그·직접 리소스 패치 자체는
-`verify_dlc_patch.py`로 원본 DLC에서 재현 검증할 수 있습니다.
+`verify_install.py`는 구형 `0x2B` 손상 IPS, `PC 0x00122204` 로그 패턴, 경로와 실제 DLC
+설치를 읽기 전용으로 검사합니다. 카탈로그·직접 리소스 패치 자체는
+`verify_dlc_patch.py`로 원본 DLC 108개에서 전수 재현 검증할 수 있습니다.
 
 ---
 

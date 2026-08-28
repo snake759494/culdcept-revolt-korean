@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Verify a v2.4 DLC overlay against the user's own plaintext DLC dump.
+"""Verify a DLC overlay against the user's own plaintext DLC dump.
 
 Usage::
 
@@ -20,6 +20,8 @@ from pathlib import Path
 
 from apply_dlc_korean import (
     DlcError,
+    RESOURCE_TITLE_OFFSET,
+    RESOURCE_TITLE_SIZE,
     catalog_records,
     find_catalog,
     find_resources,
@@ -71,7 +73,7 @@ def apply_ips(source: bytes, patch: bytes) -> bytes:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="DLC v2.4 LayeredFS 오버레이 검증")
+    parser = argparse.ArgumentParser(description="DLC LayeredFS 오버레이 안전성 검증")
     parser.add_argument("input", type=Path, help="원본 plaintext DLC 폴더 또는 .app")
     parser.add_argument("--base-dat", type=Path, required=True, help="v2.2 한글 폰트가 들어간 CULDCEPT.DAT")
     parser.add_argument("--overlay", type=Path, required=True, help="apply_dlc_korean.py의 출력 폴더")
@@ -106,21 +108,40 @@ def main() -> int:
             if not patch_file.is_file():
                 raise DlcError(f"직접 리소스 IPS가 없습니다: {patch_file}")
             actual_ips = patch_file.read_bytes()
+            source = resources[resource_path]
+            actual_target = apply_ips(source, actual_ips)
+            protected = RESOURCE_TITLE_OFFSET + RESOURCE_TITLE_SIZE
+            if actual_target[protected:] != source[protected:]:
+                raise DlcError(
+                    f"직접 리소스 IPS가 제목 뒤 헤더/페이로드를 변경합니다: {resource_path}"
+                )
+
+            resource_size = int.from_bytes(actual_target[4:8], "little")
+            payload_offset = actual_target[0x2B] or 0x80
+            if actual_target[9] and payload_offset > resource_size:
+                decrypt_length = (resource_size - payload_offset) & 0xFFFFFFFF
+                raise DlcError(
+                    f"복호화 길이 언더플로: {resource_path} "
+                    f"size=0x{resource_size:x}, payload=0x{payload_offset:x}, "
+                    f"length=0x{decrypt_length:x}"
+                )
+
             if actual_ips != expected_ips:
                 raise DlcError(f"직접 리소스 IPS가 재현되지 않습니다: {patch_file}")
 
-            source = resources[resource_path]
-            title_bytes = source[0x10:0x30].split(b"\0", 1)[0]
+            title_bytes = source[
+                RESOURCE_TITLE_OFFSET:RESOURCE_TITLE_OFFSET + RESOURCE_TITLE_SIZE
+            ].split(b"\0", 1)[0]
             original_title = title_bytes.decode("shift_jis")
             item = by_original_title[original_title]
-            actual_target = apply_ips(source, actual_ips)
             expected_target = patch_resource_title(source, item.translated_suffix, syllable_map)
             if actual_target != expected_target:
                 raise DlcError(f"IPS 적용 결과가 다릅니다: {resource_path}")
 
         print(f"카탈로그 검증: O ({len(records)}개 레코드)")
         print(f"직접 리소스 검증: O ({len(expected_patches)}개 IPS)")
-        print("결과: v2.4 DLC 오버레이가 원본에서 재현됩니다.")
+        print("보호 헤더/복호화 길이 검증: O")
+        print("결과: DLC 오버레이가 원본에서 안전하게 재현됩니다.")
         return 0
     except (DlcError, OSError, UnicodeDecodeError) as exc:
         print(f"오류: {exc}", file=sys.stderr)

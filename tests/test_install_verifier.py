@@ -111,6 +111,50 @@ class InstallVerifierTests(unittest.TestCase):
         finally:
             temp.cleanup()
 
+    def test_legacy_ips_that_overwrites_payload_offset_is_reported(self):
+        temp, root = self._make_user_dir(full_mode=True)
+        try:
+            bad = root / "load" / "mods" / "0004008c000f5700" / "romfs_ext" / "resource_000.dld.ips"
+            bad.write_bytes(b"PATCH\x00\x00\x2b\x00\x01\x00EOF")
+            checks = inspect_install(root)
+            by_label = {check.label: check for check in checks}
+            self.assertEqual(by_label["DLC 직접 리소스 IPS"].status, "X")
+            self.assertIn("0x2B", by_label["DLC 직접 리소스 IPS"].detail)
+        finally:
+            temp.cleanup()
+
+    def test_issue13_unmapped_loop_takes_priority_over_missing_resources(self):
+        temp, root = self._make_user_dir()
+        try:
+            log = root / "log" / "azahar_log.txt"
+            log.write_text(
+                "LayeredFS original file for patch /unused.dld.ips not found\n"
+                "HW.Memory <Error> unmapped Read32 @ 0x09E00000 at PC 0x00122204\n",
+                encoding="utf-8",
+            )
+            checks = inspect_install(root)
+            by_label = {check.label: check for check in checks}
+            self.assertEqual(by_label["Azahar 로그"].status, "X")
+            self.assertIn("#13", by_label["Azahar 로그"].detail)
+        finally:
+            temp.cleanup()
+
+    def test_missing_uninstalled_resource_is_not_a_patch_failure(self):
+        temp, root = self._make_user_dir()
+        try:
+            log = root / "log" / "azahar_log.txt"
+            log.write_text(
+                "LayeredFS original file for patch /unused.dld.ips not found\n"
+                "LayeredFS patched file /installed.dld\n",
+                encoding="utf-8",
+            )
+            checks = inspect_install(root)
+            by_label = {check.label: check for check in checks}
+            self.assertNotEqual(by_label["Azahar 로그"].status, "X")
+            self.assertIn("건너뜀", by_label["Azahar 로그"].detail)
+        finally:
+            temp.cleanup()
+
 
 if __name__ == "__main__":
     unittest.main()

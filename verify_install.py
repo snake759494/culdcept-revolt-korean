@@ -42,6 +42,8 @@ BASE_CARD_PROBES = ((84608, 16), (103135, 12), (183653, 6))
 BASE_CONFIRM_TAILS = ((211679, 31), (211711, 29))
 LOG_GLOB = "azahar_log*.txt"
 CATALOG_REPEAT_WARNING_THRESHOLD = 50
+FATAL_DIRECT_PATCH_PC = "0x00122204"
+RESOURCE_PAYLOAD_OFFSET_FIELD = 0x2B
 
 
 @dataclass(frozen=True)
@@ -170,6 +172,7 @@ def _check_direct_ips(user_dir: Path) -> Check:
     except OSError as exc:
         return Check("DLC 직접 리소스 IPS", "!", f"검색 실패: {exc}")
     malformed = []
+    corrupt_header = []
     for patch in patches:
         try:
             data = patch.read_bytes()
@@ -178,11 +181,42 @@ def _check_direct_ips(user_dir: Path) -> Check:
             continue
         if len(data) < 8 or data[:5] != b"PATCH" or data[-3:] != b"EOF":
             malformed.append(patch.name)
+            continue
+        try:
+            cursor = 5
+            while data[cursor:cursor + 3] != b"EOF":
+                if cursor + 5 > len(data):
+                    raise ValueError
+                offset = int.from_bytes(data[cursor:cursor + 3], "big")
+                size = int.from_bytes(data[cursor + 3:cursor + 5], "big")
+                cursor += 5
+                if size == 0:
+                    if cursor + 3 > len(data):
+                        raise ValueError
+                    size = int.from_bytes(data[cursor:cursor + 2], "big")
+                    cursor += 3
+                else:
+                    if cursor + size > len(data):
+                        raise ValueError
+                    cursor += size
+                if offset <= RESOURCE_PAYLOAD_OFFSET_FIELD < offset + size:
+                    corrupt_header.append(patch.name)
+                    break
+        except (IndexError, ValueError):
+            malformed.append(patch.name)
     if malformed:
         return Check(
             "DLC 직접 리소스 IPS",
             "X",
             f"형식 오류 {len(malformed)}개 (PATCH/EOF 헤더 확인 필요)",
+            True,
+        )
+    if corrupt_header:
+        return Check(
+            "DLC 직접 리소스 IPS",
+            "X",
+            f"구형 손상 패치 {len(corrupt_header)}개가 리소스 헤더 0x2B를 덮습니다. "
+            "v2.8의 108개 IPS로 전부 덮어쓰세요.",
             True,
         )
     count = len(patches)
@@ -325,14 +359,31 @@ def _check_log(user_dir: Path) -> Check:
         return Check("Azahar 로그", "!", "로그 읽기에 실패했습니다.")
     text = "\n".join(content for _, content in chunks)
     folded = text.casefold()
-    if "failed to patch" in folded or "original file for patch" in folded:
+    if (
+        FATAL_DIRECT_PATCH_PC in folded
+        and "hw.memory" in folded
+        and "unmapped" in folded
+    ):
         names = ", ".join(name for name, _ in chunks)
-        return Check("Azahar 로그", "X", f"{names}: IPS 원본 파일 누락 또는 패치 실패 메시지가 있습니다.", True)
+        return Check(
+            "Azahar 로그",
+            "X",
+            f"{names}: {FATAL_DIRECT_PATCH_PC} 미매핑 메모리 루프 — 구형 직접 IPS가 "
+            "리소스 헤더 0x2B를 덮어 복호화 길이가 언더플로된 #13 패턴입니다. "
+            "v2.8의 108개 IPS로 전부 덮어쓰세요.",
+            True,
+        )
+    if "failed to patch" in folded:
+        names = ", ".join(name for name, _ in chunks)
+        return Check("Azahar 로그", "X", f"{names}: IPS 패치 실패 메시지가 있습니다.", True)
     markers = []
     if "layeredfs replacement file in use for /culdcept.dat" in folded:
         markers.append("본편 DAT 적용 확인")
     if "layeredfs patched file" in folded:
         markers.append("IPS 적용 로그 확인")
+    skipped_patches = folded.count("original file for patch")
+    if skipped_patches:
+        markers.append(f"미설치 DLC용 IPS {skipped_patches}건 건너뜀")
     catalog_hits = folded.count(
         "layeredfs replacement file in use for /contentinfoarchive_jpn_ja.bin"
     )
@@ -351,7 +402,7 @@ def _check_log(user_dir: Path) -> Check:
     status = "!" if suspicious_loop else "O"
     detail = f"{names}: " + ", ".join(markers)
     if suspicious_loop:
-        detail += "; v2.7 호환(카탈로그 전용) 모드로 직접 IPS를 분리하세요."
+        detail += "; v2.8의 수정된 108개 IPS로 구형 패치를 모두 덮어쓴 뒤 새로 부팅하세요."
     return Check("Azahar 로그", status, detail)
 
 

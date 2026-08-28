@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """Build a Korean LayeredFS overlay for Culdcept Revolt DLC.
 
-The supplied DLC is a set of plaintext NCCH containers.  Version 2.3 only
-replaced ``ContentInfoArchive_JPN_ja.bin``.  The running game also reads the
-display name from the header of each direct DLC resource (``.dld``, ``.dlq``,
-``.dlm`` and related files), so version 2.4 emits IPS patches for those
-headers under ``romfs_ext`` as well.
+The supplied DLC is a set of plaintext NCCH containers.  The running game
+reads display names from both ``ContentInfoArchive_JPN_ja.bin`` and direct DLC
+resource headers (``.dld``, ``.dlq``, ``.dlm`` and related files), so the tool
+emits a translated catalog plus narrowly bounded IPS title patches under
+``romfs_ext``.
 
 Usage::
 
@@ -47,7 +47,14 @@ DESCRIPTION_OFFSET = 0x48
 DESCRIPTION_SIZE = 0x80
 
 RESOURCE_TITLE_OFFSET = 0x10
-RESOURCE_TITLE_SIZE = 0x20
+# The resource header validator at ARM 0x0027635c passes 0x1c bytes starting
+# at 0x10 to the Shift-JIS validator, then reads byte 0x2b separately as the
+# encrypted payload offset.  The title therefore has 0x1b bytes (including
+# its terminator), not 0x20.  Writing through 0x2f, as v2.4/v2.6 did, zeroed
+# the payload offset.  A 0x34-byte avatar then used the 0x80 fallback offset,
+# underflowed its decrypt length, and looped over unmapped memory at
+# PC 0x00122204 (issue #13).
+RESOURCE_TITLE_SIZE = 0x1B
 RESOURCE_EXTENSIONS = frozenset({".dla", ".dlb", ".dld", ".dlj", ".dlm", ".dlq"})
 
 # These are the records shown in the issue #8 screenshots.  Requiring them to
@@ -503,7 +510,7 @@ def main() -> int:
     parser.add_argument(
         "--base-dat",
         type=Path,
-        help="v2.2 한글 폰트가 들어간 본편 CULDCEPT.DAT (직접 리소스 패치에 필요)",
+        help="한글 폰트가 들어간 본편 CULDCEPT.DAT (직접 리소스 패치에 필요)",
     )
     parser.add_argument(
         "--catalog-only",
@@ -533,7 +540,7 @@ def main() -> int:
         else:
             if args.base_dat is None:
                 raise DlcError(
-                    "v2.4 직접 리소스 제목 패치에는 --base-dat가 필요합니다 "
+                    "직접 리소스 제목 패치에는 --base-dat가 필요합니다 "
                     "(--catalog-only는 레거시 카탈로그 전용 모드입니다)"
                 )
             syllable_map = load_syllable_map(args.base_dat)
