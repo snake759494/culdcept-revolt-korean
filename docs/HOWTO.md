@@ -63,12 +63,15 @@ python build.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT \
 
 #### 일반 사용자: 릴리즈 ZIP만 복사
 
-plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [v2.4
-릴리즈 ZIP](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.4/culdcept-dlc-korean-v2.4.zip)을
+plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [v2.6
+릴리즈 ZIP](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.6/culdcept-dlc-korean-v2.6.zip)을
 받아 압축을 푼 뒤, 안의 `load` 폴더를 Azahar 사용자 폴더(보통
 `C:\Users\<윈도우 계정>\AppData\Roaming\Azahar\`)에 병합하면 됩니다.
 
-본편 v2.2 파일과 DLC v2.4 파일은 타이틀 ID가 다릅니다. 다음처럼 배치해야 합니다.
+v2.5는 프리징 원인을 분리하기 위한 카탈로그 전용 진단 패키지였기 때문에 직접 DLC
+제목이 바뀌지 않습니다. DLC 화면까지 번역하려면 v2.6 전체 패키지를 사용하세요.
+
+본편 v2.2 파일과 DLC v2.6 파일은 타이틀 ID가 다릅니다. 다음처럼 배치해야 합니다.
 
 ```text
 Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
@@ -124,6 +127,22 @@ python verify_dlc_patch.py DLC-000f5700 \
 [Game Modding 안내](https://citra.azahar-emu.org/help/feature/game-modding/)를
 참고할 수 있습니다.
 
+#### 부팅은 되지만 DLC·카드가 그대로일 때 (이슈 #11)
+
+v2.5에서 부팅은 되지만 DLC 제목이 그대로인 것은 정상입니다. v2.5에는 카탈로그만 있고
+직접 리소스 IPS가 없기 때문입니다. [v2.6 전체 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.6/culdcept-dlc-korean-v2.6.zip)를
+받아 기존 v2.5 DLC 모드 폴더와 교체하세요.
+
+카드 설명은 DLC가 아니라 본편 `CULDCEPT.DAT`의 카드 DB에서 읽습니다. 본편 패치가
+다음 위치에 있는지 확인해야 합니다.
+
+```text
+Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
+```
+
+저장소의 `verify_install.cmd`를 더블클릭하면 기본 `%APPDATA%\Azahar` 경로를 읽기 전용으로
+검사할 수 있습니다.
+
 #### `SD카드를 확인 중입니다...`에서 멈출 때 (이슈 #10)
 
 이 화면에서 0 FPS가 되면 v2.4 직접 리소스 IPS와 Azahar의 SD/DLC 환경을 분리해서
@@ -136,7 +155,7 @@ python verify_dlc_patch.py DLC-000f5700 \
 설치되어 있어야 합니다.
 
 ```text
-sdmc\Nintendo 3DS\<ID0>\<ID1>\title\0004008c\000f5700\content\*.app
+sdmc\Nintendo 3DS\<ID0>\<ID1>\title\0004008c\000f5700\content\00000000\*.app
 ```
 
 `use_virtual_sd=true`와 `Graphics > Simulate 3DS GPU timings` 설정도 확인합니다.
@@ -146,6 +165,8 @@ sdmc\Nintendo 3DS\<ID0>\<ID1>\title\0004008c\000f5700\content\*.app
 ```bash
 python verify_install.py "<Azahar 사용자 폴더>"
 ```
+
+또는 `verify_install.cmd`를 더블클릭하세요.
 
 호환 패키지에서도 멈추면 `verify_install.py` 결과와 `Azahar\log\azahar_log.txt`의
 마지막 로그를 이슈에 남겨 주세요. 카탈로그·직접 리소스 패치 자체는

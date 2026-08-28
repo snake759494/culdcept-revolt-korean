@@ -65,8 +65,9 @@ v2.3에서 카탈로그만 바뀌고 다이스·퀘스트 화면이 그대로였
 ### 가장 쉬운 적용 — 릴리즈 파일만 복사
 
 일반 사용자는 **plaintext DLC 덤프나 파이썬을 준비할 필요가 없습니다.** 먼저 본편 v2.2
-패치가 적용된 상태에서 [v2.4 릴리즈의 `culdcept-dlc-korean-v2.4.zip`](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.4/culdcept-dlc-korean-v2.4.zip)을
-받습니다.
+패치가 적용된 상태에서 [v2.6 릴리즈의 `culdcept-dlc-korean-v2.6.zip`](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.6/culdcept-dlc-korean-v2.6.zip)을
+받습니다. v2.5는 프리징 원인을 분리하기 위해 DLC 직접 리소스를 일부러 제외한 진단용
+패키지였기 때문에, v2.5만 적용하면 다이스·맵·퀘스트 제목이 바뀌지 않는 것이 정상입니다.
 
 1. ZIP을 압축 해제합니다.
 2. 압축 해제된 `load` 폴더를 Azahar 사용자 폴더(보통
@@ -86,6 +87,28 @@ v2.3에서 카탈로그만 바뀌고 다이스·퀘스트 화면이 그대로였
 4. 게임과 에뮬레이터를 완전히 종료한 뒤 다시 실행합니다. 기존 세이브 상태를 바로
    재개하지 말고 게임을 새로 부팅하세요.
 
+### 새 이슈(#11) 대응 — v2.5에서 부팅되지만 DLC·카드가 그대로일 때
+
+이슈 #11의 현상은 v2.5 패키지의 목적과 일치합니다. v2.5는 `ContentInfoArchive_JPN_ja.bin`
+카탈로그만 넣고 `romfs_ext` 직접 리소스 IPS를 제외했으므로, 프리징은 피할 수 있지만
+다이스·맵·퀘스트·북·아바타 화면의 직접 제목은 원문으로 남습니다. DLC 제목까지 바꾸려면
+[v2.6 전체 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.6/culdcept-dlc-korean-v2.6.zip)를
+받아 v2.5 DLC 모드 폴더와 교체하세요.
+
+카드 설명은 DLC에 들어 있지 않고 본편 `CULDCEPT.DAT`의 카드 DB(엔트리 1190)에서
+읽습니다. 따라서 v2.6 DLC ZIP만으로 카드 설명이 바뀌지 않으며, 본편 패치 파일이 아래
+경로에 있어야 합니다.
+
+```text
+Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
+```
+
+기존 v2.5 또는 v2.4 DLC 폴더는 삭제하지 말고 먼저 다른 곳으로 옮긴 후 v2.6의 `load`
+폴더를 Azahar 사용자 폴더에 병합하세요. 적용 후 게임과 에뮬레이터를 완전히 종료하고
+다시 실행합니다. 설치 여부를 어려운 명령어 없이 확인하려면 저장소의
+`verify_install.cmd`를 더블클릭하세요. 기본적으로 `%APPDATA%\Azahar`를 검사하며,
+다른 사용자 폴더를 쓰면 그 폴더를 인자로 끌어다 놓아도 됩니다.
+
 ### 프리징 제보(#10) 대응 — v2.5 호환 패키지
 
 제보 영상은 3D 부팅까지 진행된 뒤 `SD카드를 확인 중입니다...` 화면에서 0 FPS로
@@ -96,11 +119,11 @@ Azahar 2126.0에서 이 증상을 겪으면 먼저 [v2.5 호환 패키지](https
 직접 리소스 IPS를 제외한 상태로 실행을 분리해 확인할 수 있습니다. v2.4의 DLC 모드
 폴더는 삭제하지 말고 다른 곳으로 잠시 옮긴 뒤 v2.5 `load` 폴더를 병합하세요.
 
-v2.4/v2.5 ZIP은 **DLC 본체를 포함하거나 설치하지 않습니다.** 본인 소유 DLC가 Azahar
+v2.4/v2.5/v2.6 ZIP은 **DLC 본체를 포함하거나 설치하지 않습니다.** 본인 소유 DLC가 Azahar
 가상 SD에 먼저 설치되어 있어야 하며, 다음 형태의 파일이 있어야 합니다.
 
 ```text
-Azahar\sdmc\Nintendo 3DS\<ID0>\<ID1>\title\0004008c\000f5700\content\*.app
+Azahar\sdmc\Nintendo 3DS\<ID0>\<ID1>\title\0004008c\000f5700\content\00000000\*.app
 ```
 
 또한 Azahar에서 `use_virtual_sd=true`인지 확인하고, 2126.0의 실험 기능인
@@ -111,6 +134,8 @@ Azahar\sdmc\Nintendo 3DS\<ID0>\<ID1>\title\0004008c\000f5700\content\*.app
 ```bash
 python verify_install.py "C:\Users\<윈도우 계정>\AppData\Roaming\Azahar"
 ```
+
+또는 `verify_install.cmd`를 더블클릭하세요.
 
 v2.5 호환 패키지에서도 같은 화면에 멈추면 번역 오버레이만으로는 원인을 설명할 수
 없습니다. 진단기 출력과 `Azahar\log\azahar_log.txt`의 마지막 부분을 이슈에 함께
@@ -147,7 +172,7 @@ python apply_ui_images.py   중간.DAT        출력/CULDCEPT.DAT  # UI 버튼 �
 번역만 담김, 일본어 원문 없음)의 번역으로 교체합니다. 게임이 대사를 절대 오프셋으로
 참조하므로 각 대화창의 한국어는 원문 바이트 한도에 맞춰져 있습니다(부족분은 공백 패딩).
 
-### DLC 한글화 — 이슈 #8 / v2.4
+### DLC 한글화 — 이슈 #8 / v2.6 (v2.4에서 직접 리소스 기능 추가)
 
 위의 릴리즈 ZIP 복사는 완성된 오버레이를 적용하는 일반 사용자용 방법입니다. 본인이
 소유한 DLC로 패치를 **다시 생성하거나 번역을 수정할 때만** 아래처럼 plaintext DLC

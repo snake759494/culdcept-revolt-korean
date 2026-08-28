@@ -33,7 +33,7 @@ class InstallVerifierTests(unittest.TestCase):
             "LayeredFS patched file /dice.dld\n",
             encoding="utf-8",
         )
-        content = root / "sdmc" / "Nintendo 3DS" / "id0" / "id1" / "title" / "0004008c" / "000f5700" / "content"
+        content = root / "sdmc" / "Nintendo 3DS" / "id0" / "id1" / "title" / "0004008c" / "000f5700" / "content" / "00000000"
         content.mkdir(parents=True)
         (content / "00000000.app").write_bytes(b"app")
         return temp, root

@@ -163,7 +163,18 @@ def _find_installed_dlc(user_dir: Path) -> list[Path]:
             content = _find_path(id1, "title", "0004008c", "000f5700", "content")
             if content is None or not content.is_dir():
                 continue
-            if any(item.is_file() and item.suffix.casefold() == ".app" for item in content.iterdir()):
+            # Azahar stores the NCCH content one level below `content` in
+            # the usual layout: `content/00000000/*.app`.  Some older dumps
+            # place the apps directly in `content`, so recurse instead of
+            # assuming either layout.
+            try:
+                has_app = any(
+                    item.is_file() and item.suffix.casefold() == ".app"
+                    for item in content.rglob("*")
+                )
+            except OSError:
+                has_app = False
+            if has_app:
                 found.append(content)
     return found
 
@@ -174,11 +185,16 @@ def _check_installed_dlc(user_dir: Path) -> Check:
         return Check(
             "실제 DLC 설치",
             "!",
-            "sdmc/Nintendo 3DS/*/*/title/0004008c/000f5700/content/*.app를 찾지 못했습니다. "
+            "sdmc/Nintendo 3DS/*/*/title/0004008c/000f5700/content/**/*.app를 찾지 못했습니다. "
             "모드 ZIP은 DLC 본체를 설치하지 않으므로 Azahar에서 본인 소유 DLC를 먼저 설치하세요.",
         )
-    files = sum(1 for directory in found for item in directory.iterdir() if item.is_file())
-    return Check("실제 DLC 설치", "O", f"{len(found)}개 경로 / {files}개 파일")
+    files = sum(
+        1
+        for directory in found
+        for item in directory.rglob("*")
+        if item.is_file() and item.suffix.casefold() == ".app"
+    )
+    return Check("실제 DLC 설치", "O", f"{len(found)}개 경로 / {files}개 .app (content 하위 검색)")
 
 
 def _read_setting(config: Path, key: str) -> str | None:
