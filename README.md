@@ -68,6 +68,9 @@ v2.3에서 카탈로그만 바뀌고 다이스·퀘스트 화면이 그대로였
 패치가 적용된 상태에서 [v2.6 릴리즈의 `culdcept-dlc-korean-v2.6.zip`](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.6/culdcept-dlc-korean-v2.6.zip)을
 받습니다. v2.5는 프리징 원인을 분리하기 위해 DLC 직접 리소스를 일부러 제외한 진단용
 패키지였기 때문에, v2.5만 적용하면 다이스·맵·퀘스트 제목이 바뀌지 않는 것이 정상입니다.
+v2.6 적용 후 `SD카드를 확인 중입니다...`에서 다시 멈추는 경우에는 아래의
+[v2.7 호환 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.7/culdcept-dlc-korean-v2.7-safe.zip)를
+사용해 직접 리소스 IPS를 제외한 상태로 부팅을 먼저 확인하세요.
 
 1. ZIP을 압축 해제합니다.
 2. 압축 해제된 `load` 폴더를 Azahar 사용자 폴더(보통
@@ -109,6 +112,24 @@ Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
 `verify_install.cmd`를 더블클릭하세요. 기본적으로 `%APPDATA%\Azahar`를 검사하며,
 다른 사용자 폴더를 쓰면 그 폴더를 인자로 끌어다 놓아도 됩니다.
 
+### 최신 이슈(#12) 대응 — v2.6에서 다시 프리징될 때
+
+이슈 #12의 `azahar_log.old.txt`에서는 본편 `CULDCEPT.DAT`와 DLC 카탈로그가 LayeredFS로
+읽혔지만, 카탈로그 접근이 216회 반복된 뒤 게임 프로세스가 정리되었습니다. 치명적 크래시나
+IPS 패치 실패 메시지는 없었으므로, v2.6의 직접 리소스 108개와 Azahar 2126.0의 DLC/SD
+환경을 분리해서 확인할 수 있도록 v2.7 호환 패키지를 추가했습니다.
+
+[v2.7 호환 패키지 다운로드](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.7/culdcept-dlc-korean-v2.7-safe.zip)는
+`ContentInfoArchive_JPN_ja.bin` 카탈로그 108개만 포함하고 `romfs_ext` 직접 IPS는 포함하지
+않습니다. 따라서 카드 설명과 본편 번역은 그대로 유지되지만 다이스·맵·퀘스트·북·아바타의
+직접 제목은 원문으로 남습니다. v2.6에서 멈추는 경우 기존 DLC 모드 폴더를 다른 곳으로
+옮긴 뒤 v2.7의 `load` 폴더를 병합하고, 본편 `CULDCEPT.DAT`는 그대로 둔 채 다시 실행하세요.
+
+v2.7의 `verify_install.py`는 `config\qt-config.ini`의 사용자 지정 `sdmc_directory`와
+`azahar_log.old.txt` 같은 회전 로그도 검사합니다. 호환 패키지에서도 멈추면 진단기 출력과
+회전 로그의 마지막 부분을 이슈에 남겨 주세요. 그 경우 번역 직접 IPS가 아니라 DLC 본체,
+가상 SD 경로 또는 Azahar 실행 환경을 우선 조사합니다.
+
 ### 프리징 제보(#10) 대응 — v2.5 호환 패키지
 
 제보 영상은 3D 부팅까지 진행된 뒤 `SD카드를 확인 중입니다...` 화면에서 0 FPS로
@@ -119,7 +140,7 @@ Azahar 2126.0에서 이 증상을 겪으면 먼저 [v2.5 호환 패키지](https
 직접 리소스 IPS를 제외한 상태로 실행을 분리해 확인할 수 있습니다. v2.4의 DLC 모드
 폴더는 삭제하지 말고 다른 곳으로 잠시 옮긴 뒤 v2.5 `load` 폴더를 병합하세요.
 
-v2.4/v2.5/v2.6 ZIP은 **DLC 본체를 포함하거나 설치하지 않습니다.** 본인 소유 DLC가 Azahar
+v2.4/v2.5/v2.6/v2.7 ZIP은 **DLC 본체를 포함하거나 설치하지 않습니다.** 본인 소유 DLC가 Azahar
 가상 SD에 먼저 설치되어 있어야 하며, 다음 형태의 파일이 있어야 합니다.
 
 ```text

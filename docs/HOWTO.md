@@ -143,6 +143,19 @@ Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
 저장소의 `verify_install.cmd`를 더블클릭하면 기본 `%APPDATA%\Azahar` 경로를 읽기 전용으로
 검사할 수 있습니다.
 
+#### v2.6에서 다시 프리징될 때 (이슈 #12)
+
+이슈 #12 로그에서는 본편 DAT와 DLC 카탈로그는 읽혔지만 카탈로그 접근이 반복된 뒤 게임
+프로세스가 정리되었습니다. v2.6의 직접 리소스 IPS와 DLC/SD 환경을 분리하려면
+[v2.7 호환 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.7/culdcept-dlc-korean-v2.7-safe.zip)를
+사용하세요. 이 패키지는 카탈로그만 포함하므로 카드·본편 번역은 유지하지만 DLC 직접
+제목은 원문으로 남습니다.
+
+기존 DLC 모드 폴더를 다른 곳으로 옮긴 뒤 v2.7 ZIP의 `load` 폴더를 사용자 폴더에
+병합하고, 본편 `CULDCEPT.DAT`는 그대로 둔 채 게임을 다시 실행합니다. v2.7의 진단기는
+`config\qt-config.ini`에 지정된 `sdmc_directory`와 `azahar_log.old.txt` 같은 회전 로그도
+검사합니다. 호환 패키지에서도 멈추면 진단기 출력과 회전 로그를 이슈에 남겨 주세요.
+
 #### `SD카드를 확인 중입니다...`에서 멈출 때 (이슈 #10)
 
 이 화면에서 0 FPS가 되면 v2.4 직접 리소스 IPS와 Azahar의 SD/DLC 환경을 분리해서

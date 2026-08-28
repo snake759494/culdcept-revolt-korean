@@ -40,6 +40,8 @@ EXPECTED_CATALOG_COUNT = 108
 EXPECTED_DIRECT_IPS = 108
 BASE_CARD_PROBES = ((84608, 16), (103135, 12), (183653, 6))
 BASE_CONFIRM_TAILS = ((211679, 31), (211711, 29))
+LOG_GLOB = "azahar_log*.txt"
+CATALOG_REPEAT_WARNING_THRESHOLD = 50
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,10 @@ def _find_path(root: Path, *parts: str) -> Path | None:
         if current is None:
             return None
     return current
+
+
+def _config_path(user_dir: Path) -> Path | None:
+    return _find_path(user_dir, "config", "qt-config.ini")
 
 
 def _is_hangul_probe(value: bytes) -> bool:
@@ -163,6 +169,22 @@ def _check_direct_ips(user_dir: Path) -> Check:
         patches = [item for item in path.rglob("*") if item.is_file() and item.suffix.casefold() == ".ips"]
     except OSError as exc:
         return Check("DLC 직접 리소스 IPS", "!", f"검색 실패: {exc}")
+    malformed = []
+    for patch in patches:
+        try:
+            data = patch.read_bytes()
+        except OSError:
+            malformed.append(patch.name)
+            continue
+        if len(data) < 8 or data[:5] != b"PATCH" or data[-3:] != b"EOF":
+            malformed.append(patch.name)
+    if malformed:
+        return Check(
+            "DLC 직접 리소스 IPS",
+            "X",
+            f"형식 오류 {len(malformed)}개 (PATCH/EOF 헤더 확인 필요)",
+            True,
+        )
     count = len(patches)
     if count not in (0, EXPECTED_DIRECT_IPS):
         return Check(
@@ -191,10 +213,23 @@ def _check_wrong_base_placement(user_dir: Path) -> Check:
     return Check("DLC의 본편 폴더 오배치", "O", "발견되지 않음")
 
 
+def _sdmc_root(user_dir: Path) -> Path:
+    """Return the SD root Azahar is configured to use, if available."""
+
+    config = _config_path(user_dir)
+    configured = _read_setting(config, "sdmc_directory") if config else None
+    if not configured:
+        return user_dir / "sdmc"
+    path = Path(configured).expanduser()
+    if not path.is_absolute():
+        path = user_dir / path
+    return path
+
+
 def _find_installed_dlc(user_dir: Path) -> list[Path]:
     """Return installed DLC content directories under any 3DS ID pair."""
 
-    nintendo_3ds = _find_path(user_dir, "sdmc", "Nintendo 3DS")
+    nintendo_3ds = _find_path(_sdmc_root(user_dir), "Nintendo 3DS")
     if nintendo_3ds is None or not nintendo_3ds.is_dir():
         return []
     found: list[Path] = []
@@ -229,7 +264,7 @@ def _check_installed_dlc(user_dir: Path) -> Check:
         return Check(
             "실제 DLC 설치",
             "!",
-            "sdmc/Nintendo 3DS/*/*/title/0004008c/000f5700/content/**/*.app를 찾지 못했습니다. "
+            f"{_sdmc_root(user_dir)}\\Nintendo 3DS\\*\\*\\title\\0004008c\\000f5700\\content\\**\\*.app를 찾지 못했습니다. "
             "모드 ZIP은 DLC 본체를 설치하지 않으므로 Azahar에서 본인 소유 DLC를 먼저 설치하세요.",
         )
     files = sum(
@@ -255,7 +290,7 @@ def _read_setting(config: Path, key: str) -> str | None:
 
 
 def _check_virtual_sd(user_dir: Path) -> Check:
-    config = _find_path(user_dir, "config", "qt-config.ini")
+    config = _config_path(user_dir)
     if config is None or not config.is_file():
         return Check("가상 SD 설정", "!", "config/qt-config.ini를 찾지 못했습니다.")
     value = _read_setting(config, "use_virtual_sd")
@@ -267,24 +302,57 @@ def _check_virtual_sd(user_dir: Path) -> Check:
 
 
 def _check_log(user_dir: Path) -> Check:
-    log = _find_path(user_dir, "log", "azahar_log.txt")
-    if log is None or not log.is_file():
-        return Check("Azahar 로그", "!", "log/azahar_log.txt를 찾지 못했습니다.")
+    log_dir = _find_path(user_dir, "log")
+    if log_dir is None or not log_dir.is_dir():
+        return Check("Azahar 로그", "!", "log/azahar_log*.txt를 찾지 못했습니다.")
     try:
-        text = log.read_text(encoding="utf-8", errors="replace")
+        logs = sorted(
+            (item for item in log_dir.glob(LOG_GLOB) if item.is_file()),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
     except OSError as exc:
-        return Check("Azahar 로그", "!", f"읽기 실패: {exc}")
+        return Check("Azahar 로그", "!", f"로그 목록 읽기 실패: {exc}")
+    if not logs:
+        return Check("Azahar 로그", "!", "log/azahar_log*.txt를 찾지 못했습니다.")
+    chunks = []
+    for log in logs[:5]:
+        try:
+            chunks.append((log.name, log.read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+    if not chunks:
+        return Check("Azahar 로그", "!", "로그 읽기에 실패했습니다.")
+    text = "\n".join(content for _, content in chunks)
     folded = text.casefold()
     if "failed to patch" in folded or "original file for patch" in folded:
-        return Check("Azahar 로그", "X", "IPS 원본 파일 누락 또는 패치 실패 메시지가 있습니다.", True)
+        names = ", ".join(name for name, _ in chunks)
+        return Check("Azahar 로그", "X", f"{names}: IPS 원본 파일 누락 또는 패치 실패 메시지가 있습니다.", True)
     markers = []
     if "layeredfs replacement file in use for /culdcept.dat" in folded:
         markers.append("본편 DAT 적용 확인")
     if "layeredfs patched file" in folded:
         markers.append("IPS 적용 로그 확인")
+    catalog_hits = folded.count(
+        "layeredfs replacement file in use for /contentinfoarchive_jpn_ja.bin"
+    )
+    process_cleanups = folded.count("cleaning up process")
+    suspicious_loop = (
+        catalog_hits >= CATALOG_REPEAT_WARNING_THRESHOLD and process_cleanups > 0
+    )
+    if suspicious_loop:
+        markers.append(
+            f"카탈로그 반복 접근 {catalog_hits}회 후 프로세스 정리 — 프리징 의심"
+        )
     if not markers:
-        return Check("Azahar 로그", "!", "LayeredFS 적용 로그가 없습니다. 게임을 한 번 실행한 뒤 다시 검사하세요.")
-    return Check("Azahar 로그", "O", ", ".join(markers))
+        names = ", ".join(name for name, _ in chunks)
+        return Check("Azahar 로그", "!", f"{names}: LayeredFS 적용 로그가 없습니다. 게임을 한 번 실행한 뒤 다시 검사하세요.")
+    names = ", ".join(name for name, _ in chunks)
+    status = "!" if suspicious_loop else "O"
+    detail = f"{names}: " + ", ".join(markers)
+    if suspicious_loop:
+        detail += "; v2.7 호환(카탈로그 전용) 모드로 직접 IPS를 분리하세요."
+    return Check("Azahar 로그", status, detail)
 
 
 def inspect_install(user_dir: Path) -> list[Check]:
