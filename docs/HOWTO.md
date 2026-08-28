@@ -16,6 +16,7 @@
 | 파이썬 3 | `pip install pillow numpy` |
 | 한글 TTF | 릴리즈와 동일하게 하려면 **나눔스퀘어 네오 Bold** → `fonts/NanumSquareNeo-cBd.ttf` ([배포처](https://hangeul.naver.com/font)) |
 | (선택) xdelta3 | 배포용 diff 패치를 만들 때 |
+| (선택) DLC 덤프 | 본인이 소유한 DLC `DLC-000f5700.zip`을 압축 해제한 폴더 |
 
 ### CULDCEPT.DAT 추출
 
@@ -57,6 +58,27 @@ python build.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT \
 
 정상 적용 시 로그에 `LayeredFS replacement file in use for /CULDCEPT.DAT` 가 뜹니다.
 실기는 이 파일로 RomFS 를 재빌드해 ROM/CIA 를 만드세요.
+
+### DLC 카탈로그 한글화 (이슈 #7)
+
+DLC는 본편과 다른 타이틀 ID(`0004008c000f5700`)를 사용합니다. 첨부된 DLC 덤프처럼
+`.app` 파일이 있는 폴더를 입력하면 스크립트가 plaintext RomFS의 카탈로그를 찾아
+108개 레코드의 제목·설명을 한국어로 교체합니다. 원본 DLC 데이터는 읽기만 하며
+저장소에는 들어 있지 않습니다.
+
+```bash
+python apply_dlc_korean.py DLC-000f5700 --output dlc-mod
+```
+
+다음 파일을 에뮬레이터 사용자 폴더의 동일한 위치에 복사합니다.
+
+```
+dlc-mod/load/mods/0004008c000f5700/romfs/ContentInfoArchive_JPN_ja.bin
+```
+
+카드 설명은 DLC에 추가된 카드 데이터가 아니라 본편 `CULDCEPT.DAT`의 카드 DB에서
+읽히므로, 카드 설명 문제는 본편 패치를 함께 적용해야 해결됩니다. `dlc_ko.json`은
+한국어만 보관하며 일본어 원문은 본인 DLC 파일에서 검사할 때 읽습니다.
 
 ---
 

@@ -23,6 +23,11 @@ Bold**로 렌더링합니다.
 이 버튼들은 글자까지 통째로 그려진 **ETC1 텍스처**라 색까지 다시 인코딩해야 해서,
 3DS ETC1 디코더·인코더를 직접 구현했습니다(`culdcept/etc1.py`).
 
+**v2.3부터는 DLC(타이틀 ID `0004008c000f5700`) 카탈로그도 한글화**합니다. 이슈 #7에
+첨부된 DLC 덤프에서 추출한 108개 고정 레코드(신규 맵·퀘스트·북·아바타·주사위)를
+본인 파일에서 읽어 LayeredFS 오버레이로 재현합니다. DLC 원본이나 게임 데이터는
+저장소에 포함하지 않습니다.
+
 **이 저장소만으로 처음부터 직접 빌드할 수 있습니다** — 본인의 `CULDCEPT.DAT` 하나만
 있으면 `python build.py` 한 줄로 텍스트·UI 이미지 패치가 전부 재현됩니다.
 자세한 절차·새 번역 추가·새 아틀라스 찾는 법은 **[`docs/HOWTO.md`](docs/HOWTO.md)** 참고.
@@ -83,6 +88,21 @@ python apply_ui_images.py   중간.DAT        출력/CULDCEPT.DAT  # UI 버튼 �
 `apply_korean_full.py` 는 본인 파일에서 대사·UI 위치를 찾아, `dialogue_ko.json`(한국어
 번역만 담김, 일본어 원문 없음)의 번역으로 교체합니다. 게임이 대사를 절대 오프셋으로
 참조하므로 각 대화창의 한국어는 원문 바이트 한도에 맞춰져 있습니다(부족분은 공백 패딩).
+
+### DLC 한글화 — 이슈 #7
+
+본인이 소유한 DLC `DLC-000f5700.zip`을 먼저 압축 해제한 뒤, 아래 명령을 실행합니다.
+스크립트는 `.app`의 plaintext RomFS에서 `ContentInfoArchive_JPN_ja.bin`을 찾아 같은
+길이의 한국어 파일을 만들고, 게임 타이틀 ID에 맞는 LayeredFS 경로를 생성합니다.
+
+```bash
+python apply_dlc_korean.py DLC-000f5700 --output dlc-mod
+```
+
+생성된 `dlc-mod/load/mods/0004008c000f5700/romfs/ContentInfoArchive_JPN_ja.bin`을
+에뮬레이터 사용자 폴더의 같은 `load/mods/.../romfs/` 경로에 복사하세요. 본편 카드
+설명은 DLC 파일이 아니라 본편 `CULDCEPT.DAT`에 있으므로, 카드 설명까지 고치려면
+먼저 본편 패치를 적용한 뒤 DLC 오버레이를 추가해야 합니다.
 
 ### 방법 B — xdelta 패치 (빠름, 원본이 정확히 일치할 때)
 
@@ -167,6 +187,8 @@ raw = huffman.decompress(d.entry(1054))     # -> 압축 해제된 폰트 리소�
 - `narration_ko.json` — **양피지 가이드 나레이션**의 한국어(엔트리·오프셋·크기별,
   256×64 35종 + 256×128 12종). `apply_narration.py`로 텍스처에 렌더·주입.
   (0x0d 엔트리 디코드에 게임 `code.bin`이 필요 — 저작권상 미배포, 각자 롬에서 추출.)
+- `dlc_ko.json` — DLC 카탈로그 108개 고정 레코드의 한국어 제목·설명.
+  `apply_dlc_korean.py`가 본인 DLC 덤프에서 원본을 읽고 같은 길이로 교체합니다.
 
 모두 한국어 번역만 담으며, 일본어 원문은 없습니다(적용 시 본인 파일에서 읽음).
 
