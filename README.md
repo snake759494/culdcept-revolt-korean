@@ -62,6 +62,34 @@ v2.3에서 카탈로그만 바뀌고 다이스·퀘스트 화면이 그대로였
 **나눔스퀘어 네오 Bold**로 만든 것이므로, 방법 A에서 그 폰트를 `fonts/`에 두거나
 `--font`로 지정하면 릴리즈와 똑같이 나옵니다(다른 TTF면 글리프 모양만 달라짐).
 
+### 가장 쉬운 적용 — 릴리즈 파일만 복사
+
+일반 사용자는 **plaintext DLC 덤프나 파이썬을 준비할 필요가 없습니다.** 먼저 본편 v2.2
+패치가 적용된 상태에서 [v2.4 릴리즈의 `culdcept-dlc-korean-v2.4.zip`](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.4/culdcept-dlc-korean-v2.4.zip)을
+받습니다.
+
+1. ZIP을 압축 해제합니다.
+2. 압축 해제된 `load` 폴더를 Azahar 사용자 폴더(보통
+   `C:\Users\<윈도우 계정>\AppData\Roaming\Azahar\`)에 **폴더째 병합**합니다.
+   `load` 폴더 안의 파일만 따로 꺼내 현재 모드 폴더에 넣지 마세요.
+3. 다음 두 경로가 각각 존재하는지 확인합니다.
+
+   ```text
+   Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
+   Azahar\load\mods\0004008c000f5700\romfs\ContentInfoArchive_JPN_ja.bin
+   Azahar\load\mods\0004008c000f5700\romfs_ext\dice_simple_blue.dld.ips
+   ```
+
+   `CULDCEPT.DAT`는 본편 ID `00040000000F5700`에 두고, DLC 파일은 DLC ID
+   `0004008c000f5700`에 둡니다. `ContentInfoArchive_JPN_ja.bin`을 본편 폴더에 넣으면
+   적용되지 않습니다.
+4. 게임과 에뮬레이터를 완전히 종료한 뒤 다시 실행합니다. 기존 세이브 상태를 바로
+   재개하지 말고 게임을 새로 부팅하세요.
+
+`plaintext DLC 덤프`는 개발자가 번역 패치를 다시 만들 때만 필요한 자료입니다. 압축을
+푼 폴더 안에 `content\00000000\00000000.app` 같은 `.app` 파일이 있는 형태이며,
+게임의 `.3dsx` 파일이나 v2.4 패치 ZIP을 뜻하지 않습니다.
+
 ### 방법 A — 파이썬 툴 (권장, 어떤 판본이든 구조가 같으면 동작)
 
 필요: 파이썬 3, [Pillow](https://pypi.org/project/Pillow/), 한글 TTF.
@@ -91,7 +119,11 @@ python apply_ui_images.py   중간.DAT        출력/CULDCEPT.DAT  # UI 버튼 �
 
 ### DLC 한글화 — 이슈 #8 / v2.4
 
-본인이 소유한 DLC `DLC-000f5700.zip`을 먼저 압축 해제한 뒤, 아래 명령을 실행합니다.
+위의 릴리즈 ZIP 복사는 완성된 오버레이를 적용하는 일반 사용자용 방법입니다. 본인이
+소유한 DLC로 패치를 **다시 생성하거나 번역을 수정할 때만** 아래처럼 plaintext DLC
+덤프를 준비합니다.
+
+본인이 소유한 DLC `DLC-000f5700.zip`을 압축 해제한 뒤, 아래 명령을 실행합니다.
 스크립트는 `.app`의 plaintext RomFS에서 카탈로그와 직접 DLC 리소스를 읽습니다. 카탈로그는
 같은 길이의 한국어 파일로 만들고, 다이스·맵·퀘스트·북·책 표지·아바타의 화면 제목은
 `romfs_ext` IPS 패치로 생성합니다. v2.2 본편 패치의 한글 폰트가 필요합니다.

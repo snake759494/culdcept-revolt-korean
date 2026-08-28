@@ -61,6 +61,28 @@ python build.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT \
 
 ### DLC 한글화 (이슈 #8 / v2.4)
 
+#### 일반 사용자: 릴리즈 ZIP만 복사
+
+plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [v2.4
+릴리즈 ZIP](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.4/culdcept-dlc-korean-v2.4.zip)을
+받아 압축을 푼 뒤, 안의 `load` 폴더를 Azahar 사용자 폴더(보통
+`C:\Users\<윈도우 계정>\AppData\Roaming\Azahar\`)에 병합하면 됩니다.
+
+본편 v2.2 파일과 DLC v2.4 파일은 타이틀 ID가 다릅니다. 다음처럼 배치해야 합니다.
+
+```text
+Azahar\load\mods\00040000000F5700\romfs\CULDCEPT.DAT
+Azahar\load\mods\0004008c000f5700\romfs\ContentInfoArchive_JPN_ja.bin
+Azahar\load\mods\0004008c000f5700\romfs_ext\dice_simple_blue.dld.ips
+```
+
+특히 `ContentInfoArchive_JPN_ja.bin`을 `00040000000F5700` 본편 폴더에 넣으면 안 됩니다.
+아자하르의 `Mods Location` 메뉴로 본편 폴더가 열리더라도, 릴리즈 ZIP의 `load` 폴더를
+그 폴더 안에 넣지 말고 그 상위 Azahar 사용자 폴더에 병합하세요. 병합 후 에뮬레이터와
+게임을 완전히 재시작합니다.
+
+#### 직접 패치를 다시 만들 때
+
 DLC는 본편과 다른 타이틀 ID(`0004008c000f5700`)를 사용합니다. 첨부된 DLC 덤프처럼
 `.app` 파일이 있는 폴더를 입력하면 스크립트가 plaintext RomFS의 카탈로그와 직접 DLC
 리소스를 찾아 108개 레코드의 제목·설명을 교체합니다. v2.3은 카탈로그만 바꿨지만,
