@@ -508,7 +508,7 @@ def main() -> int:
     parser.add_argument(
         "--catalog-only",
         action="store_true",
-        help="레거시 v2.3 방식으로 카탈로그만 생성 (이슈 #8의 직접 제목은 고치지 않음)",
+        help="Azahar 호환 모드: 카탈로그만 생성하고 직접 리소스 IPS는 생략",
     )
     parser.add_argument(
         "--translations",

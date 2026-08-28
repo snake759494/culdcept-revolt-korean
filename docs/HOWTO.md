@@ -124,6 +124,33 @@ python verify_dlc_patch.py DLC-000f5700 \
 [Game Modding 안내](https://citra.azahar-emu.org/help/feature/game-modding/)를
 참고할 수 있습니다.
 
+#### `SD카드를 확인 중입니다...`에서 멈출 때 (이슈 #10)
+
+이 화면에서 0 FPS가 되면 v2.4 직접 리소스 IPS와 Azahar의 SD/DLC 환경을 분리해서
+확인하세요. [v2.5 호환 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.5/culdcept-dlc-korean-v2.5-compat.zip)는
+직접 리소스 IPS를 제외하고 카탈로그만 적용합니다. 기존 v2.4의
+`load\mods\0004008c000f5700` 폴더는 삭제하지 말고 잠시 다른 위치로 옮긴 뒤, v2.5의
+`load` 폴더를 사용자 폴더에 병합하세요.
+
+번역 ZIP은 DLC 본체가 아니므로, Azahar의 가상 SD에 본인 소유 DLC가 다음 위치로
+설치되어 있어야 합니다.
+
+```text
+sdmc\Nintendo 3DS\<ID0>\<ID1>\title\0004008c\000f5700\content\*.app
+```
+
+`use_virtual_sd=true`와 `Graphics > Simulate 3DS GPU timings` 설정도 확인합니다.
+설치 경로와 로그를 한 번에 확인하려면 저장소 루트에서 다음 읽기 전용 진단기를
+실행하세요.
+
+```bash
+python verify_install.py "<Azahar 사용자 폴더>"
+```
+
+호환 패키지에서도 멈추면 `verify_install.py` 결과와 `Azahar\log\azahar_log.txt`의
+마지막 로그를 이슈에 남겨 주세요. 카탈로그·직접 리소스 패치 자체는
+`verify_dlc_patch.py`로 원본 DLC에서 재현 검증할 수 있습니다.
+
 ---
 
 ## 2. 재현성 검증

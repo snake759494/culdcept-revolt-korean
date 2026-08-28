@@ -86,6 +86,36 @@ v2.3에서 카탈로그만 바뀌고 다이스·퀘스트 화면이 그대로였
 4. 게임과 에뮬레이터를 완전히 종료한 뒤 다시 실행합니다. 기존 세이브 상태를 바로
    재개하지 말고 게임을 새로 부팅하세요.
 
+### 프리징 제보(#10) 대응 — v2.5 호환 패키지
+
+제보 영상은 3D 부팅까지 진행된 뒤 `SD카드를 확인 중입니다...` 화면에서 0 FPS로
+멈추는 증상입니다. v2.4의 패치 데이터는 원본 DLC에서 카탈로그 108개와 직접 리소스
+IPS 108개가 모두 재현되지만, 직접 리소스 IPS는 화면 제목을 위한 부가 기능입니다.
+Azahar 2126.0에서 이 증상을 겪으면 먼저 [v2.5 호환 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.5/culdcept-dlc-korean-v2.5-compat.zip)를
+사용하세요. 이 패키지는 `ContentInfoArchive_JPN_ja.bin`만 넣는 카탈로그 전용 모드라서,
+직접 리소스 IPS를 제외한 상태로 실행을 분리해 확인할 수 있습니다. v2.4의 DLC 모드
+폴더는 삭제하지 말고 다른 곳으로 잠시 옮긴 뒤 v2.5 `load` 폴더를 병합하세요.
+
+v2.4/v2.5 ZIP은 **DLC 본체를 포함하거나 설치하지 않습니다.** 본인 소유 DLC가 Azahar
+가상 SD에 먼저 설치되어 있어야 하며, 다음 형태의 파일이 있어야 합니다.
+
+```text
+Azahar\sdmc\Nintendo 3DS\<ID0>\<ID1>\title\0004008c\000f5700\content\*.app
+```
+
+또한 Azahar에서 `use_virtual_sd=true`인지 확인하고, 2126.0의 실험 기능인
+`Graphics > Simulate 3DS GPU timings`가 켜져 있다면 끈 뒤 완전히 재시작하세요.
+설치 경로를 바꾸기 전에 저장소의 읽기 전용 진단기를 실행하면 원인을 구분할 수
+있습니다.
+
+```bash
+python verify_install.py "C:\Users\<윈도우 계정>\AppData\Roaming\Azahar"
+```
+
+v2.5 호환 패키지에서도 같은 화면에 멈추면 번역 오버레이만으로는 원인을 설명할 수
+없습니다. 진단기 출력과 `Azahar\log\azahar_log.txt`의 마지막 부분을 이슈에 함께
+올려 주세요.
+
 `plaintext DLC 덤프`는 개발자가 번역 패치를 다시 만들 때만 필요한 자료입니다. 압축을
 푼 폴더 안에 `content\00000000\00000000.app` 같은 `.app` 파일이 있는 형태이며,
 게임의 `.3dsx` 파일이나 v2.4 패치 ZIP을 뜻하지 않습니다.
@@ -238,6 +268,8 @@ raw = huffman.decompress(d.entry(1054))     # -> 압축 해제된 폰트 리소�
 - `dlc_ko.json` — DLC 카탈로그 108개 고정 레코드의 한국어 제목·설명.
   `apply_dlc_korean.py`가 본인 DLC 덤프에서 원본을 읽고 카탈로그와 직접 리소스 제목을
   함께 교체합니다. `verify_dlc_patch.py`로 출력 IPS의 재현성을 검사할 수 있습니다.
+- `verify_install.py` — Azahar의 본편/DLC 모드 경로, 실제 DLC 설치, 가상 SD 설정과
+  LayeredFS 로그를 변경 없이 점검합니다(이슈 #10 진단용).
 
 모두 한국어 번역만 담으며, 일본어 원문은 없습니다(적용 시 본인 파일에서 읽음).
 
