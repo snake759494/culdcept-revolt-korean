@@ -59,26 +59,48 @@ python build.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT \
 정상 적용 시 로그에 `LayeredFS replacement file in use for /CULDCEPT.DAT` 가 뜹니다.
 실기는 이 파일로 RomFS 를 재빌드해 ROM/CIA 를 만드세요.
 
-### DLC 카탈로그 한글화 (이슈 #7)
+### DLC 한글화 (이슈 #8 / v2.4)
 
 DLC는 본편과 다른 타이틀 ID(`0004008c000f5700`)를 사용합니다. 첨부된 DLC 덤프처럼
-`.app` 파일이 있는 폴더를 입력하면 스크립트가 plaintext RomFS의 카탈로그를 찾아
-108개 레코드의 제목·설명을 한국어로 교체합니다. 원본 DLC 데이터는 읽기만 하며
-저장소에는 들어 있지 않습니다.
+`.app` 파일이 있는 폴더를 입력하면 스크립트가 plaintext RomFS의 카탈로그와 직접 DLC
+리소스를 찾아 108개 레코드의 제목·설명을 교체합니다. v2.3은 카탈로그만 바꿨지만,
+실제 다이스·맵·퀘스트·북·책 표지·아바타 선택 화면은 각 `.dld`·`.dlm`·`.dlq`·`.dlb`·
+`.dlj`·`.dla` 파일의 헤더 제목을 읽으므로 v2.4는 그 부분을 `romfs_ext` IPS로 함께
+패치합니다. 원본 DLC 데이터는 읽기만 하며 저장소에는 들어 있지 않습니다.
+
+직접 리소스 제목도 본편 v2.2 패치가 설치한 고정 완성형 폰트 매핑을 사용하므로, 먼저
+본편 `CULDCEPT.DAT`를 패치해 둡니다.
 
 ```bash
-python apply_dlc_korean.py DLC-000f5700 --output dlc-mod
+python apply_dlc_korean.py DLC-000f5700 \
+    --base-dat patched/CULDCEPT.DAT --output dlc-mod
 ```
 
-다음 파일을 에뮬레이터 사용자 폴더의 동일한 위치에 복사합니다.
+생성된 `dlc-mod/load/`를 에뮬레이터 사용자 폴더에 병합합니다. 파일 구조는 다음과
+같습니다.
 
 ```
 dlc-mod/load/mods/0004008c000f5700/romfs/ContentInfoArchive_JPN_ja.bin
+dlc-mod/load/mods/0004008c000f5700/romfs_ext/dice_simple_blue.dld.ips
+dlc-mod/load/mods/0004008c000f5700/romfs_ext/dlc_batsdays.dlq.ips
 ```
 
 카드 설명은 DLC에 추가된 카드 데이터가 아니라 본편 `CULDCEPT.DAT`의 카드 DB에서
 읽히므로, 카드 설명 문제는 본편 패치를 함께 적용해야 해결됩니다. `dlc_ko.json`은
 한국어만 보관하며 일본어 원문은 본인 DLC 파일에서 검사할 때 읽습니다.
+
+원본 DLC와 패치된 본편 DAT가 준비되어 있으면 출력물을 복사하기 전에 재현성 검사를
+실행할 수 있습니다.
+
+```bash
+python verify_dlc_patch.py DLC-000f5700 \
+    --base-dat patched/CULDCEPT.DAT --overlay dlc-mod
+```
+
+이슈 #8의 다이스·퀘스트 제목이 그대로라면 `romfs_ext` 폴더까지 병합했는지, 게임을
+완전히 재시작했는지 확인하세요. Azahar/Citra 계열의 타이틀별 모드 경로는 공식
+[Game Modding 안내](https://citra.azahar-emu.org/help/feature/game-modding/)를
+참고할 수 있습니다.
 
 ---
 

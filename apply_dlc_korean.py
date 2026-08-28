@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Apply the Korean DLC catalog overlay for Culdcept Revolt.
+"""Build a Korean LayeredFS overlay for Culdcept Revolt DLC.
 
-The supplied DLC is a set of plaintext NCCH containers.  The visible DLC
-catalog is stored in ``ContentInfoArchive_JPN_ja.bin`` inside the first
-container.  Each catalog entry has a fixed-size UTF-8 title and description
-field, so the patch can be applied without rebuilding the NCCH or TMD.
+The supplied DLC is a set of plaintext NCCH containers.  Version 2.3 only
+replaced ``ContentInfoArchive_JPN_ja.bin``.  The running game also reads the
+display name from the header of each direct DLC resource (``.dld``, ``.dlq``,
+``.dlm`` and related files), so version 2.4 emits IPS patches for those
+headers under ``romfs_ext`` as well.
 
 Usage::
 
-    python apply_dlc_korean.py path/to/DLC-000f5700 --output dlc-mod
+    python apply_dlc_korean.py path/to/DLC-000f5700 \
+        --base-dat path/to/patched/CULDCEPT.DAT --output dlc-mod
 
 The output is a LayeredFS tree rooted at ``load/mods/0004008c000f5700``.
-Only the translated catalog file is written; no game or DLC content is
-distributed by this repository.
+Only translated fields and small IPS patches are written; no game or DLC
+content is distributed by this repository.
 """
 
 from __future__ import annotations
@@ -22,7 +24,16 @@ import argparse
 import json
 import struct
 import sys
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+
+from culdcept import dat as datmod
+from culdcept import font as fontmod
+from culdcept import huffman
+from culdcept import wansung
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 TITLE_ID = "0004008c000f5700"
@@ -35,9 +46,33 @@ TITLE_SIZE = 0x40
 DESCRIPTION_OFFSET = 0x48
 DESCRIPTION_SIZE = 0x80
 
+RESOURCE_TITLE_OFFSET = 0x10
+RESOURCE_TITLE_SIZE = 0x20
+RESOURCE_EXTENSIONS = frozenset({".dla", ".dlb", ".dld", ".dlj", ".dlm", ".dlq"})
+
+# These are the records shown in the issue #8 screenshots.  Requiring them to
+# be found in the direct resources prevents a catalog-only or incomplete DLC
+# dump from producing a seemingly successful but ineffective v2.4 overlay.
+ISSUE8_REQUIRED_RECORDS = frozenset({2, 70, *range(53, 65), *range(99, 105)})
+
+# U+00B7 is useful in the UTF-8 catalog, but is not representable in Shift-JIS
+# resource headers.  The visually equivalent Shift-JIS middle dot is used in
+# those headers only.
+RESOURCE_CHAR_REPLACEMENTS = {"·": "・"}
+
 
 class DlcError(ValueError):
     """A malformed or unsupported DLC input."""
+
+
+@dataclass(frozen=True)
+class CatalogRecord:
+    number: int
+    original_title: str
+    translated_title: str
+    original_suffix: str
+    translated_suffix: str
+    translated_description: str
 
 
 def u32(data: bytes, offset: int) -> int:
@@ -151,7 +186,7 @@ def parse_romfs(app_path: Path) -> dict[str, tuple[int, int]]:
     return files
 
 
-def find_catalog(input_path: Path) -> tuple[Path, bytes]:
+def app_candidates(input_path: Path) -> list[Path]:
     if input_path.is_file() and input_path.suffix.lower() == ".app":
         candidates = [input_path]
     elif input_path.is_dir():
@@ -161,7 +196,11 @@ def find_catalog(input_path: Path) -> tuple[Path, bytes]:
 
     if not candidates:
         raise DlcError(f"no .app files found below: {input_path}")
+    return candidates
 
+
+def find_catalog(input_path: Path) -> tuple[Path, bytes]:
+    candidates = app_candidates(input_path)
     errors: list[str] = []
     for app_path in candidates:
         try:
@@ -184,6 +223,43 @@ def find_catalog(input_path: Path) -> tuple[Path, bytes]:
     )
 
 
+def find_resources(input_path: Path) -> dict[str, bytes]:
+    """Read direct DLC resources keyed by their RomFS path.
+
+    A resource can occur in more than one NCCH app in the supplied dump.  The
+    duplicate is accepted only when its bytes are identical.
+    """
+
+    resources: dict[str, bytes] = {}
+    errors: list[str] = []
+    for app_path in app_candidates(input_path):
+        try:
+            locations = parse_romfs(app_path)
+            app_data = app_path.read_bytes()
+        except DlcError as exc:
+            errors.append(str(exc))
+            continue
+
+        for romfs_path, (offset, size) in locations.items():
+            if PurePosixPath(romfs_path).suffix.lower() not in RESOURCE_EXTENSIONS:
+                continue
+            data = app_data[offset:offset + size]
+            if len(data) != size:
+                raise DlcError(f"{app_path.name}: resource data truncated for {romfs_path}")
+            previous = resources.get(romfs_path)
+            if previous is not None and previous != data:
+                raise DlcError(f"duplicate DLC resource differs between apps: {romfs_path}")
+            resources[romfs_path] = data
+
+    if not resources:
+        detail = "; ".join(errors[:3])
+        raise DlcError(
+            "no direct DLC resources (.dla/.dlb/.dld/.dlj/.dlm/.dlq) found"
+            + (f": {detail}" if detail else "")
+        )
+    return resources
+
+
 def decode_field(data: bytes, offset: int, size: int) -> str:
     raw = data[offset:offset + size].split(b"\0", 1)[0]
     try:
@@ -202,7 +278,9 @@ def load_translations(path: Path) -> dict[str, dict[str, str]]:
     return payload
 
 
-def patch_catalog(data: bytes, translations: dict[str, dict[str, str]]) -> tuple[bytes, list[str]]:
+def catalog_records(
+    data: bytes, translations: dict[str, dict[str, str]]
+) -> list[CatalogRecord]:
     if len(data) < 8 or u32(data, 0) != 1:
         raise DlcError("unexpected DLC catalog header")
     count = u32(data, 4)
@@ -212,8 +290,7 @@ def patch_catalog(data: bytes, translations: dict[str, dict[str, str]]) -> tuple
     if len(data) < end:
         raise DlcError(f"DLC catalog is truncated: {len(data)} bytes (need {end})")
 
-    patched = bytearray(data)
-    changed: list[str] = []
+    records: list[CatalogRecord] = []
     for number in range(1, count + 1):
         key = str(number)
         item = translations.get(key)
@@ -239,29 +316,199 @@ def patch_catalog(data: bytes, translations: dict[str, dict[str, str]]) -> tuple
         if len(description_bytes) >= DESCRIPTION_SIZE:
             raise DlcError(f"record {number} description exceeds {DESCRIPTION_SIZE - 1} bytes")
 
+        records.append(
+            CatalogRecord(
+                number=number,
+                original_title=original_title,
+                translated_title=title,
+                original_suffix=original_title[len(prefix):],
+                translated_suffix=title[len(prefix):],
+                translated_description=description,
+            )
+        )
+    return records
+
+
+def patch_catalog_records(data: bytes, records: list[CatalogRecord]) -> tuple[bytes, list[str]]:
+    patched = bytearray(data)
+    changed: list[str] = []
+    for item in records:
+        record = CATALOG_BASE + (item.number - 1) * CATALOG_STRIDE
+        title_bytes = item.translated_title.encode("utf-8")
+        description_bytes = item.translated_description.encode("utf-8")
         title_start = record + TITLE_OFFSET
         description_start = record + DESCRIPTION_OFFSET
         patched[title_start:title_start + TITLE_SIZE] = title_bytes.ljust(TITLE_SIZE, b"\0")
         patched[description_start:description_start + DESCRIPTION_SIZE] = description_bytes.ljust(
             DESCRIPTION_SIZE, b"\0"
         )
-        changed.append(f"{number:03d} {original_title} -> {title}")
-
+        changed.append(f"{item.number:03d} {item.original_title} -> {item.translated_title}")
     return bytes(patched), changed
+
+
+def patch_catalog(data: bytes, translations: dict[str, dict[str, str]]) -> tuple[bytes, list[str]]:
+    """Patch all fixed-size catalog records, retaining the old public API."""
+
+    return patch_catalog_records(data, catalog_records(data, translations))
+
+
+def load_syllable_map(base_dat: Path) -> dict[str, int]:
+    """Build the fixed Wansung mapping used by the v2.2 patched font."""
+
+    try:
+        data = base_dat.read_bytes()
+        archive = datmod.Dat(data)
+        if archive.count <= 1054:
+            raise DlcError(f"base DAT has no font entry 1054: {base_dat}")
+        raw_font = huffman.decompress(archive.entry(1054))
+        cmap = fontmod.parse_cmap(raw_font)
+        return wansung.build_fixed_map(cmap)
+    except DlcError:
+        raise
+    except (OSError, IndexError, struct.error, ValueError) as exc:
+        raise DlcError(f"cannot read patched base DAT {base_dat}: {exc}") from exc
+
+
+def decode_resource_title(data: bytes, resource_path: str) -> str:
+    if len(data) < RESOURCE_TITLE_OFFSET + RESOURCE_TITLE_SIZE:
+        raise DlcError(f"DLC resource is too small for a title header: {resource_path}")
+    raw = data[RESOURCE_TITLE_OFFSET:RESOURCE_TITLE_OFFSET + RESOURCE_TITLE_SIZE].split(b"\0", 1)[0]
+    try:
+        return raw.decode("shift_jis")
+    except UnicodeDecodeError as exc:
+        raise DlcError(f"DLC resource title is not Shift-JIS: {resource_path}") from exc
+
+
+def encode_resource_title(title: str, syllable_map: dict[str, int]) -> bytes:
+    normalized = "".join(RESOURCE_CHAR_REPLACEMENTS.get(ch, ch) for ch in title)
+    encoded = bytearray()
+    for ch in normalized:
+        part = wansung.encode_char(ch, syllable_map)
+        if not part:
+            raise DlcError(f"DLC resource title contains an unsupported character: {title!r} ({ch!r})")
+        encoded.extend(part)
+    if len(encoded) >= RESOURCE_TITLE_SIZE:
+        raise DlcError(
+            f"DLC resource title exceeds {RESOURCE_TITLE_SIZE - 1} bytes: {title!r}"
+        )
+    return bytes(encoded)
+
+
+def patch_resource_title(
+    data: bytes, title: str, syllable_map: dict[str, int]
+) -> bytes:
+    encoded = encode_resource_title(title, syllable_map)
+    patched = bytearray(data)
+    start = RESOURCE_TITLE_OFFSET
+    patched[start:start + RESOURCE_TITLE_SIZE] = encoded.ljust(RESOURCE_TITLE_SIZE, b"\0")
+    return bytes(patched)
+
+
+def make_ips_patch(source: bytes, target: bytes) -> bytes:
+    """Create a minimal IPS patch for equal-length source and target bytes."""
+
+    if len(source) != len(target):
+        raise DlcError("IPS source and target must have the same length")
+
+    patch = bytearray(b"PATCH")
+    i = 0
+    while i < len(source):
+        if source[i] == target[i]:
+            i += 1
+            continue
+        start = i
+        while i < len(source) and source[i] != target[i]:
+            i += 1
+        while start < i:
+            chunk_size = min(i - start, 0xFFFF)
+            if start > 0xFFFFFF:
+                raise DlcError(f"resource offset is too large for IPS: 0x{start:x}")
+            patch.extend(start.to_bytes(3, "big"))
+            patch.extend(chunk_size.to_bytes(2, "big"))
+            patch.extend(target[start:start + chunk_size])
+            start += chunk_size
+    patch.extend(b"EOF")
+    return bytes(patch)
+
+
+def patch_resources(
+    resources: dict[str, bytes],
+    records: list[CatalogRecord],
+    syllable_map: dict[str, int],
+) -> tuple[dict[str, bytes], list[str], set[int]]:
+    by_original_title: dict[str, CatalogRecord] = {}
+    for item in records:
+        previous = by_original_title.get(item.original_suffix)
+        if previous is not None and previous.translated_suffix != item.translated_suffix:
+            raise DlcError(
+                f"catalog has duplicate direct title with different translations: {item.original_suffix!r}"
+            )
+        by_original_title[item.original_suffix] = item
+
+    patches: dict[str, bytes] = {}
+    changed: list[str] = []
+    matched_numbers: set[int] = set()
+    for resource_path, source in sorted(resources.items()):
+        original_title = decode_resource_title(source, resource_path)
+        item = by_original_title.get(original_title)
+        if item is None:
+            # Keep unknown future resources untouched.  The required issue #8
+            # records below still make incomplete dumps fail loudly.
+            continue
+        matched_numbers.add(item.number)
+        target = patch_resource_title(source, item.translated_suffix, syllable_map)
+        if target != source:
+            patches[resource_path] = make_ips_patch(source, target)
+            changed.append(f"{resource_path}: {original_title} -> {item.translated_suffix}")
+
+    missing = sorted(ISSUE8_REQUIRED_RECORDS - matched_numbers)
+    if missing:
+        numbers = ", ".join(str(number) for number in missing)
+        raise DlcError(
+            f"DLC direct-resource titles missing for issue #8 records: {numbers}"
+        )
+    return patches, changed, matched_numbers
 
 
 def output_path(root: Path) -> Path:
     return root / "load" / "mods" / TITLE_ID / "romfs" / CATALOG_NAME
 
 
+def output_resource_path(root: Path, resource_path: str) -> Path:
+    normalized = resource_path.replace("\\", "/").lstrip("/")
+    relative = PurePosixPath(normalized)
+    if not normalized or relative == PurePosixPath(".") or any(part in ("", ".", "..") for part in relative.parts):
+        raise DlcError(f"unsafe DLC resource path: {resource_path!r}")
+    relative_path = Path(*relative.parts)
+    return (
+        root
+        / "load"
+        / "mods"
+        / TITLE_ID
+        / "romfs_ext"
+        / relative_path.parent
+        / f"{relative_path.name}.ips"
+    )
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="DLC-000f5700 카탈로그 한글 LayeredFS 오버레이 생성")
+    parser = argparse.ArgumentParser(description="DLC-000f5700 한글 LayeredFS 오버레이 생성")
     parser.add_argument("input", type=Path, help="DLC ZIP을 푼 폴더 또는 Content/00000000/*.app")
     parser.add_argument(
         "--output",
         type=Path,
         required=True,
         help="오버레이 트리를 만들 폴더 (예: 에뮬레이터 사용자 폴더)",
+    )
+    parser.add_argument(
+        "--base-dat",
+        type=Path,
+        help="v2.2 한글 폰트가 들어간 본편 CULDCEPT.DAT (직접 리소스 패치에 필요)",
+    )
+    parser.add_argument(
+        "--catalog-only",
+        action="store_true",
+        help="레거시 v2.3 방식으로 카탈로그만 생성 (이슈 #8의 직접 제목은 고치지 않음)",
     )
     parser.add_argument(
         "--translations",
@@ -274,17 +521,49 @@ def main() -> int:
     try:
         app_path, original = find_catalog(args.input)
         translations = load_translations(args.translations)
-        patched, changed = patch_catalog(original, translations)
-        destination = output_path(args.output)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(patched)
+        records = catalog_records(original, translations)
+        patched_catalog, changed_catalog = patch_catalog_records(original, records)
+
+        resource_patches: dict[str, bytes] = {}
+        changed_resources: list[str] = []
+        matched_numbers: set[int] = set()
+        if args.catalog_only:
+            if args.base_dat is not None:
+                raise DlcError("--catalog-only와 --base-dat는 함께 사용할 수 없습니다")
+        else:
+            if args.base_dat is None:
+                raise DlcError(
+                    "v2.4 직접 리소스 제목 패치에는 --base-dat가 필요합니다 "
+                    "(--catalog-only는 레거시 카탈로그 전용 모드입니다)"
+                )
+            syllable_map = load_syllable_map(args.base_dat)
+            resources = find_resources(args.input)
+            resource_patches, changed_resources, matched_numbers = patch_resources(
+                resources, records, syllable_map
+            )
+
+        catalog_destination = output_path(args.output)
+        catalog_destination.parent.mkdir(parents=True, exist_ok=True)
+        catalog_destination.write_bytes(patched_catalog)
+        for resource_path, patch in resource_patches.items():
+            destination = output_resource_path(args.output, resource_path)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(patch)
     except (DlcError, OSError) as exc:
         print(f"오류: {exc}", file=sys.stderr)
         return 1
 
     print(f"입력 NCCH: {app_path}")
-    print(f"카탈로그: {len(original):,} 바이트 / {len(changed)}개 레코드")
-    print(f"출력: {destination}")
+    print(f"카탈로그: {len(original):,} 바이트 / {len(changed_catalog)}개 레코드")
+    if args.catalog_only:
+        print("직접 리소스: 생략 (--catalog-only)")
+    else:
+        print(
+            f"직접 리소스: {len(resource_patches)}개 IPS / "
+            f"{len(matched_numbers)}개 카탈로그 레코드 매칭"
+        )
+        print(f"필수 화면 항목 패치: {len(ISSUE8_REQUIRED_RECORDS)}개 매칭")
+    print(f"출력: {catalog_destination.parent.parent.parent.parent.parent}")
     print(f"타이틀 ID: {TITLE_ID}")
     return 0
 

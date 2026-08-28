@@ -24,6 +24,9 @@ import sys
 
 from culdcept import huffman
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # (엔트리, 압축해제 후 오프셋, 길이) — 원본 기준 위치. 전부 원문이 가타카나인 자리.
 PROBE_CARD_NAME = (1190, 84608, 16)      # 어떤 방어구 카드의 이름
 PROBE_CARD_NAME2 = (1190, 103135, 12)    # 어떤 무기 카드의 이름
