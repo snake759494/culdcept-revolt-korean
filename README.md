@@ -73,7 +73,7 @@ Bold**로 렌더링합니다.
 ### 가장 쉬운 적용 — v2.9 통합 릴리즈
 
 일반 사용자는 **plaintext DLC 덤프나 파이썬을 준비할 필요가 없습니다.**
-[v2.9 `culdcept-korean-complete-v2.9.zip`](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.9/culdcept-korean-complete-v2.9.zip)에는
+[v2.9 `culdcept-korean-complete-v2.10.zip`](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.10/culdcept-korean-complete-v2.10.zip)에는
 본편 xdelta와 DLC 카탈로그·수정 IPS 108개, 설치·카드 검증기가 함께 들어 있습니다.
 
 1. ZIP을 새 폴더에 압축 해제합니다.
@@ -123,7 +123,7 @@ v2.7 호환 ZIP은 `romfs_ext`를 포함하지 않아 **새 폴더에 설치할 
 이슈 #11의 현상은 v2.5 패키지의 목적과 일치합니다. v2.5는 `ContentInfoArchive_JPN_ja.bin`
 카탈로그만 넣고 `romfs_ext` 직접 리소스 IPS를 제외했으므로, 프리징은 피할 수 있지만
 다이스·맵·퀘스트·북·아바타 화면의 직접 제목은 원문으로 남습니다. DLC 제목까지 바꾸려면
-[v2.9 통합 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.9/culdcept-korean-complete-v2.9.zip)를
+[v2.9 통합 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.10/culdcept-korean-complete-v2.10.zip)를
 받아 본편 xdelta를 적용하고, `load` 폴더를 v2.5 DLC 모드 폴더에 병합하세요.
 
 카드 설명은 DLC에 들어 있지 않고 본편 `CULDCEPT.DAT`의 카드 DB(엔트리 1190)에서
