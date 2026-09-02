@@ -402,7 +402,11 @@ def _check_log(user_dir: Path) -> Check:
     status = "!" if suspicious_loop else "O"
     detail = f"{names}: " + ", ".join(markers)
     if suspicious_loop:
-        detail += "; v2.8의 수정된 108개 IPS로 구형 패치를 모두 덮어쓴 뒤 새로 부팅하세요."
+        detail += (
+            "; 이 로그는 게임을 껐다 켜기 전 기록일 수 있습니다."
+            " 설치.cmd 를 한 번 실행해 본편 폴더 오배치를 정리한 뒤,"
+            " Azahar 를 완전히 종료하고 새로 부팅해 다시 검사하세요."
+        )
     return Check("Azahar 로그", status, detail)
 
 

@@ -27,6 +27,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 BASE_TID = "00040000000F5700"
 DLC_TID = "0004008c000f5700"
+CATALOG_NAME = "ContentInfoArchive_JPN_ja.bin"
 BASE_REL = Path("load") / "mods" / BASE_TID / "romfs" / "CULDCEPT.DAT"
 HERE = Path(__file__).resolve().parent
 
@@ -59,6 +60,31 @@ def copy_tree_no_delete(src: Path, dst: Path) -> int:
     return n
 
 
+def clean_misplaced_dlc(az: Path, dry_run: bool = False) -> list[str]:
+    """본편 모드 폴더에 잘못 들어간 **DLC 전용 파일**만 골라 치운다.
+
+    예전 패키지의 `load` 폴더를 통째로 옮기다 보면 DLC 카탈로그와 IPS 108개가
+    본편 타이틀 폴더(`load/mods/00040000000F5700/`)에 들어가는 일이 있었다.
+    그러면 Azahar 가 본편 RomFS 에 없는 파일을 계속 찾아 IPS 를 수만 번 건너뛰고,
+    카탈로그를 반복 접근하다 프리징으로 이어진다(이슈 #14/#15).
+
+    본편 패치 파일(`romfs/CULDCEPT.DAT`)은 절대 건드리지 않는다.
+    """
+    base = az / "load" / "mods" / BASE_TID
+    removed: list[str] = []
+    catalog = base / "romfs" / CATALOG_NAME
+    if catalog.is_file():
+        if not dry_run:
+            catalog.unlink()
+        removed.append(str(catalog))
+    ext = base / "romfs_ext"
+    if ext.is_dir():
+        if not dry_run:
+            shutil.rmtree(ext)
+        removed.append(f"{ext} (romfs_ext 폴더)")
+    return removed
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="컬드셉트 리볼트 한글패치 설치기")
     ap.add_argument("--azahar", help="Azahar 사용자 폴더 (미지정 시 자동 탐색)")
@@ -81,6 +107,17 @@ def main() -> int:
         else:
             print("DLC 오버레이가 설치되어 있지 않습니다.")
         return 0
+
+    # ── 본편 폴더에 잘못 들어간 DLC 파일 정리 ───────────
+    # 이걸 두면 Azahar 가 본편 RomFS 에서 IPS 를 수만 번 건너뛰고 카탈로그를
+    # 반복 접근하다 프리징된다(이슈 #14/#15). 본편 CULDCEPT.DAT 은 건드리지 않는다.
+    misplaced = clean_misplaced_dlc(az)
+    if misplaced:
+        print("본편 폴더에 잘못 들어가 있던 DLC 파일을 정리했습니다:")
+        for item in misplaced:
+            print(f"  - {item}")
+    else:
+        print("본편 폴더 오배치: 없음")
 
     # ── DLC 오버레이 (선택) ─────────────────────────────
     if a.skip_dlc:
