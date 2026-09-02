@@ -319,3 +319,58 @@ class UpdateCodePatchTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             make_ips_patch(b"abc", b"abcd")
+
+
+class CatalogEncodingTests(unittest.TestCase):
+    """이슈 #19/#20: 한글을 그대로 쓴 카탈로그는 DLC 목록을 통째로 날린다."""
+
+    def _catalog(self, text: str) -> bytes:
+        from verify_install import (CATALOG_FIELDS, CATALOG_RECORD_BASE,
+                                    CATALOG_RECORD_STRIDE, EXPECTED_CATALOG_SIZE)
+
+        data = bytearray(EXPECTED_CATALOG_SIZE)
+        struct.pack_into("<II", data, 0, 1, 108)
+        for index in range(108):
+            record = CATALOG_RECORD_BASE + index * CATALOG_RECORD_STRIDE
+            for offset, size in CATALOG_FIELDS:
+                encoded = text.encode("utf-8")[:size - 1]
+                data[record + offset:record + offset + size] = encoded.ljust(size, b"\0")
+        return bytes(data)
+
+    def _check(self, text: str):
+        from verify_install import _check_catalog
+
+        temp = tempfile.TemporaryDirectory()
+        with temp:
+            root = Path(temp.name)
+            romfs = root / "load" / "mods" / "0004008c000f5700" / "romfs"
+            romfs.mkdir(parents=True)
+            (romfs / "ContentInfoArchive_JPN_ja.bin").write_bytes(self._catalog(text))
+            return _check_catalog(root)
+
+    def test_hangul_catalog_is_rejected(self):
+        check = self._check("브로드라인")
+        self.assertEqual(check.status, "X")
+        self.assertIn("Shift-JIS", check.detail)
+        self.assertTrue(check.blocking)
+
+    def test_sjis_representable_catalog_passes(self):
+        # 한글 글리프가 들어앉은 한자로 적으면 변환에 성공한다.
+        check = self._check("崎稽球虞昔")
+        self.assertEqual(check.status, "O")
+
+
+class CatalogSjisSafeTests(unittest.TestCase):
+    def test_to_sjis_safe_round_trips(self):
+        from apply_dlc_korean import to_sjis_safe
+
+        syllable_map = {"가": 0x889F, "나": 0x88A0}
+        text = to_sjis_safe("가나", syllable_map)
+        self.assertEqual(len(text), 2)
+        text.encode("cp932")                      # 변환 가능해야 한다
+        self.assertNotIn("가", text)
+
+    def test_middle_dot_is_replaced(self):
+        from apply_dlc_korean import to_sjis_safe
+
+        to_sjis_safe("\u00b7", {}).encode("cp932")

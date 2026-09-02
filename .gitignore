@@ -33,3 +33,9 @@ i17/
 scan*.log
 *.zip
 _scratch/
+i1*/
+i1*.json
+i2*.json
+newimgs.txt
+dlc_probe.txt
+dlcscan.py

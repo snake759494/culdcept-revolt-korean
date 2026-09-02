@@ -242,6 +242,7 @@ def main() -> int:
         if newstyle.is_dir():
             n = copy_tree_no_delete(newstyle, dlc_dst)
             print(f"DLC 오버레이 파일 {n}개 복사 → {dlc_dst}")
+            print("  (게임에서 DLC 가 안 보이면 `설치.cmd --skip-dlc` 로 이 폴더 없이 설치하세요)")
         elif oldstyle.is_dir():                       # 구버전 패키지 호환
             n = copy_tree_no_delete(oldstyle, az)
             print(f"DLC 오버레이 파일 {n}개 복사 (구버전 배치)")

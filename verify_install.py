@@ -145,6 +145,31 @@ def _check_base(user_dir: Path) -> Check:
     return Check("본편 CULDCEPT.DAT", "O", detail)
 
 
+
+# 카탈로그는 UTF-8 인데 게임이 Shift-JIS 로 바꿔 그린다. 한글을 그대로 적으면 변환이
+# 실패해 DLC 목록이 통째로 비어 버렸다(이슈 #19/#20). 한글 글리프가 들어앉은 한자로
+# 적어야 하고, 이 검사가 그 회귀를 막는다.
+CATALOG_RECORD_BASE = 0xC8
+CATALOG_RECORD_STRIDE = 0xC8
+CATALOG_FIELDS = ((0x08, 0x40), (0x48, 0x80))
+
+
+def _catalog_sjis_failures(data: bytes, count: int) -> int:
+    failures = 0
+    for index in range(count):
+        record = CATALOG_RECORD_BASE + index * CATALOG_RECORD_STRIDE
+        for offset, size in CATALOG_FIELDS:
+            field = data[record + offset:record + offset + size]
+            if not field:
+                continue
+            text = field.split(bytes(1))[0].decode("utf-8", "replace")
+            try:
+                text.encode("cp932")
+            except UnicodeEncodeError:
+                failures += 1
+    return failures
+
+
 def _check_catalog(user_dir: Path) -> Check:
     path = _find_path(user_dir, "load", "mods", DLC_TITLE_ID, "romfs", CATALOG_NAME)
     if path is None or not path.is_file():
@@ -167,7 +192,18 @@ def _check_catalog(user_dir: Path) -> Check:
         )
     if len(data) < 8 or struct.unpack_from("<II", data, 0) != (1, EXPECTED_CATALOG_COUNT):
         return Check("DLC 카탈로그", "X", "헤더 또는 108개 레코드 수가 올바르지 않습니다.", True)
-    return Check("DLC 카탈로그", "O", f"{len(data):,}바이트 / {EXPECTED_CATALOG_COUNT}개 레코드")
+    failures = _catalog_sjis_failures(data, EXPECTED_CATALOG_COUNT)
+    if failures:
+        return Check(
+            "DLC 카탈로그",
+            "X",
+            f"{len(data):,}바이트 / {EXPECTED_CATALOG_COUNT}개 레코드 — "
+            f"Shift-JIS 로 바꿀 수 없는 필드 {failures}개. 게임이 카탈로그를 읽지 못해 "
+            "★DLC 가 통째로 사라집니다★. 최신 패키지로 다시 설치하세요.",
+            True,
+        )
+    return Check("DLC 카탈로그", "O",
+                 f"{len(data):,}바이트 / {EXPECTED_CATALOG_COUNT}개 레코드 / Shift-JIS 변환 가능")
 
 
 def _check_direct_ips(user_dir: Path) -> Check:

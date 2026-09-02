@@ -336,13 +336,19 @@ def catalog_records(
     return records
 
 
-def patch_catalog_records(data: bytes, records: list[CatalogRecord]) -> tuple[bytes, list[str]]:
+def patch_catalog_records(data: bytes, records: list[CatalogRecord],
+                          syllable_map: dict[str, int] | None = None) -> tuple[bytes, list[str]]:
     patched = bytearray(data)
     changed: list[str] = []
     for item in records:
         record = CATALOG_BASE + (item.number - 1) * CATALOG_STRIDE
-        title_bytes = item.translated_title.encode("utf-8")
-        description_bytes = item.translated_description.encode("utf-8")
+        title = item.translated_title
+        description = item.translated_description
+        if syllable_map:
+            title = to_sjis_safe(title, syllable_map)
+            description = to_sjis_safe(description, syllable_map)
+        title_bytes = title.encode("utf-8")
+        description_bytes = description.encode("utf-8")
         title_start = record + TITLE_OFFSET
         description_start = record + DESCRIPTION_OFFSET
         patched[title_start:title_start + TITLE_SIZE] = title_bytes.ljust(TITLE_SIZE, b"\0")
@@ -384,6 +390,30 @@ def decode_resource_title(data: bytes, resource_path: str) -> str:
         return raw.decode("shift_jis")
     except UnicodeDecodeError as exc:
         raise DlcError(f"DLC resource title is not Shift-JIS: {resource_path}") from exc
+
+
+def to_sjis_safe(text: str, syllable_map: dict[str, int]) -> str:
+    """한글을, **그 글리프가 들어앉은 한자 문자**로 바꾼다(카탈로그용).
+
+    카탈로그(`ContentInfoArchive_JPN_ja.bin`)는 UTF-8 인데, 게임은 이걸 자기 내부
+    인코딩인 Shift-JIS 로 바꿔서 그린다. 한글은 Shift-JIS 에 없으므로 변환이 실패하고,
+    그러면 **DLC 목록 자체가 통째로 비어 버린다**(이슈 #19/#20 — 이 폴더만 빼면 DLC 가
+    정상으로 나온다는 제보).
+
+    그래서 한글을 그대로 쓰지 않고, 완성형 매핑이 그 음절에 배정한 **JIS 제1수준 한자**
+    를 UTF-8 로 적는다. 게임은 정상적인 한자로 보고 Shift-JIS 로 변환하지만, 그 코드의
+    글리프는 우리가 한글로 바꿔 둔 자리라 화면에는 한글이 나온다. 한자도 한글도 UTF-8
+    3바이트라 필드 길이도 그대로다.
+    """
+    out = []
+    for ch in text:
+        ch = RESOURCE_CHAR_REPLACEMENTS.get(ch, ch)   # Shift-JIS 에 없는 기호 대체
+        code = syllable_map.get(ch)
+        if code is None:
+            out.append(ch)
+            continue
+        out.append(bytes([code >> 8, code & 0xFF]).decode("cp932"))
+    return "".join(out)
 
 
 def encode_resource_title(title: str, syllable_map: dict[str, int]) -> bytes:
@@ -529,7 +559,13 @@ def main() -> int:
         app_path, original = find_catalog(args.input)
         translations = load_translations(args.translations)
         records = catalog_records(original, translations)
-        patched_catalog, changed_catalog = patch_catalog_records(original, records)
+        syllable_map: dict[str, int] | None = None
+        if args.base_dat is not None:
+            syllable_map = load_syllable_map(args.base_dat)
+        # 카탈로그는 UTF-8 이지만 게임이 Shift-JIS 로 바꿔 그린다. 한글을 그대로 쓰면
+        # 변환이 실패해 DLC 목록이 통째로 비어 버린다(이슈 #19/#20). 한글 글리프가
+        # 들어앉은 한자로 적어야 변환에 성공하면서 화면에는 한글이 나온다.
+        patched_catalog, changed_catalog = patch_catalog_records(original, records, syllable_map)
 
         resource_patches: dict[str, bytes] = {}
         changed_resources: list[str] = []
@@ -543,7 +579,6 @@ def main() -> int:
                     "직접 리소스 제목 패치에는 --base-dat가 필요합니다 "
                     "(--catalog-only는 레거시 카탈로그 전용 모드입니다)"
                 )
-            syllable_map = load_syllable_map(args.base_dat)
             resources = find_resources(args.input)
             resource_patches, changed_resources, matched_numbers = patch_resources(
                 resources, records, syllable_map
