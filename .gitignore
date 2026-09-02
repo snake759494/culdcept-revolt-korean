@@ -20,3 +20,15 @@ out/
 *.ttf
 *.otf
 !fonts/README.md
+
+# 진단/분석용 임시 산출물 (게임 데이터 파생물 포함)
+dlc_files/
+dlc_overlay/
+pkg/
+rel/
+rel11/
+allrel/
+i17/
+scan*.log
+*.zip
+_scratch/

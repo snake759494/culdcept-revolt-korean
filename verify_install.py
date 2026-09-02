@@ -292,6 +292,24 @@ def _find_installed_dlc(user_dir: Path) -> list[Path]:
     return found
 
 
+def _find_dlc_tickets(user_dir: Path) -> list[Path]:
+    """nand/dbs/ticket.db 안의 DLC 티켓 파일 목록(대소문자 무시)."""
+    ticket_dir = _find_path(user_dir, "nand", "dbs", "ticket.db")
+    if ticket_dir is None or not ticket_dir.is_dir():
+        return []
+    prefix = DLC_TITLE_ID.casefold()
+    try:
+        return [
+            item
+            for item in ticket_dir.iterdir()
+            if item.is_file()
+            and item.name.casefold().startswith(prefix)
+            and item.suffix.casefold() == ".tik"
+        ]
+    except OSError:
+        return []
+
+
 def _check_installed_dlc(user_dir: Path) -> Check:
     found = _find_installed_dlc(user_dir)
     if not found:
@@ -307,7 +325,36 @@ def _check_installed_dlc(user_dir: Path) -> Check:
         for item in directory.rglob("*")
         if item.is_file() and item.suffix.casefold() == ".app"
     )
-    return Check("실제 DLC 설치", "O", f"{len(found)}개 경로 / {files}개 .app (content 하위 검색)")
+    detail = f"{len(found)}개 경로 / {files}개 .app (content 하위 검색)"
+
+    # .app 만 복사해 넣으면 Azahar 가 DLC 를 인식하지 못한다. 타이틀 메타데이터
+    # (.tmd) 와 티켓이 모두 있어야 게임에서 추가 콘텐츠가 보인다.
+    tmds = sum(
+        1
+        for directory in found
+        for item in directory.rglob("*")
+        if item.is_file() and item.suffix.casefold() == ".tmd"
+    )
+    if not tmds:
+        return Check(
+            "실제 DLC 설치",
+            "X",
+            detail + " / .tmd 없음 — content 폴더에 .app 만 복사하면 DLC 가 인식되지 않습니다. "
+            "Azahar 의 파일 > 설치(CIA)로 본인 소유 DLC CIA 를 다시 설치하세요.",
+            True,
+        )
+    detail += f" / .tmd {tmds}개"
+
+    if not _find_dlc_tickets(user_dir):
+        return Check(
+            "실제 DLC 설치",
+            "X",
+            detail + " / DLC 티켓 없음 — nand/dbs/ticket.db/0004008C000F5700.*.tik 가 없습니다. "
+            "티켓이 없으면 게임 안에서 추가 콘텐츠가 통째로 사라진 것처럼 보입니다. "
+            "Azahar 의 파일 > 설치(CIA)로 본인 소유 DLC CIA 를 다시 설치하세요.",
+            True,
+        )
+    return Check("실제 DLC 설치", "O", detail + " / 티켓 있음")
 
 
 def _read_setting(config: Path, key: str) -> str | None:
@@ -410,14 +457,170 @@ def _check_log(user_dir: Path) -> Check:
     return Check("Azahar 로그", status, detail)
 
 
+# ---------------------------------------------------------------- 심층 진단 ----
+# 엔트리 1190 은 압축을 풀면 다시 5개 섹션짜리 컨테이너다.  섹션마다 무엇이 들어
+# 있는지, 그리고 원본에 남아 있던 일본어 가나 바이트가 몇 개였는지를 기록해 둔다.
+# 파일 크기나 세 군데 probe 만으로는 "UI 는 한글인데 카드만 원문" 같은 반쪽 상태를
+# 잡아내지 못해서(이슈 #17), 섹션별 번역률을 직접 계산한다.
+CARD_DB_SECTIONS = (
+    ("s0 카드 이름·능력·설명", 0x000028, 153786, 44986),
+    ("s1 보조 텍스트",          0x0258E4,   3253,   677),
+    ("s2 규칙·도움말",          0x02659C,  12382,  2647),
+    ("s3 메뉴·UI 텍스트",       0x0295FC,  84164, 20201),
+)
+# 배포본별 지문: (파일 크기, s0 가나 수) -> 이름
+KNOWN_BUILDS = {
+    (291_464_350, 44986): "원본(한글패치 안 됨)",
+    (294_044_643, 44973): "v1.0 (2026-07-10, 카드 DB 미번역)",
+    (294_044_643,  4109): "v1.1",
+    (296_031_199,  4109): "v1.2 / v1.3",
+    (296_032_236,  1701): "v1.4 ~ v1.6",
+    (303_849_467,  1695): "v1.7",
+    (303_997_594,  1695): "v1.8",
+    (304_251_261,  1695): "v1.9",
+    (300_005_903,  1695): "v2.0 이후(현재 계열)",
+}
+
+
+def _kana_count(buf: bytes, start: int, length: int) -> int:
+    """Shift-JIS 가나·기호 리드바이트(0x81~0x84) 쌍의 개수 = 남은 원문 분량."""
+    seg = buf[start:start + length]
+    n = i = 0
+    end = len(seg) - 1
+    while i < end:
+        if 0x81 <= seg[i] <= 0x84:
+            n += 1
+            i += 2
+        else:
+            i += 1
+    return n
+
+
+def _check_card_db(user_dir: Path) -> Check:
+    path = _find_path(user_dir, "load", "mods", BASE_TITLE_ID, "romfs", "CULDCEPT.DAT")
+    if path is None or not path.is_file():
+        return Check("카드 DB 번역 상태", "X", "본편 CULDCEPT.DAT 이 없어 검사하지 못했습니다.", True)
+    try:
+        data = path.read_bytes()
+        entry_offset, entry_size = struct.unpack_from("<II", data, 1190 * 8)
+        ui = huffman.decompress(data[entry_offset:entry_offset + entry_size])
+    except (OSError, IndexError, struct.error, ValueError, NotImplementedError) as exc:
+        return Check("카드 DB 번역 상태", "X", f"엔트리 1190 해제 실패: {exc}", True)
+
+    parts = []
+    worst = None
+    for label, start, length, original in CARD_DB_SECTIONS:
+        left = _kana_count(ui, start, length)
+        done = max(0, min(100, round((1 - left / original) * 100)))
+        parts.append(f"{label} {done}%")
+        if worst is None or done < worst[0]:
+            worst = (done, label, left)
+
+    size = path.stat().st_size
+    s0_left = _kana_count(ui, CARD_DB_SECTIONS[0][1], CARD_DB_SECTIONS[0][2])
+    build = KNOWN_BUILDS.get((size, s0_left))
+    if build is None:
+        # 정확히 일치하는 배포본이 없으면 s0 만으로 대략 판정한다.
+        build = "알 수 없는 조합" if s0_left > 5000 else "현재 계열(크기 다름)"
+    detail = " / ".join(parts) + f" — 판정: {build}"
+
+    if worst is not None and worst[0] < 50:
+        return Check(
+            "카드 DB 번역 상태",
+            "X",
+            detail + f" ▶ {worst[1]} 섹션에 원문이 {worst[2]:,}자 남아 있습니다. "
+            "게임이 이 파일이 아닌 다른 CULDCEPT.DAT 을 읽고 있거나 파일이 구버전입니다.",
+            True,
+        )
+    return Check("카드 DB 번역 상태", "O", detail)
+
+
+OTHER_USER_DIRS = (
+    ("Azahar", ("AppData", "Roaming", "Azahar")),
+    ("Azahar(Local)", ("AppData", "Local", "Azahar")),
+    ("Citra", ("AppData", "Roaming", "Citra")),
+    ("Lime3DS", ("AppData", "Roaming", "Lime3DS")),
+)
+
+
+def _newest_log_time(user_dir: Path) -> float:
+    log_dir = _find_path(user_dir, "log")
+    if log_dir is None or not log_dir.is_dir():
+        return 0.0
+    times = [item.stat().st_mtime for item in log_dir.glob(LOG_GLOB) if item.is_file()]
+    return max(times) if times else 0.0
+
+
+def _check_other_user_dirs(user_dir: Path) -> Check:
+    """진단한 폴더 말고 다른 에뮬레이터 사용자 폴더가 실제로 쓰이고 있는지 본다.
+
+    설치는 A 폴더에 했는데 게임은 B 폴더로 돌아가면, 파일 검사는 전부 통과하는데
+    게임에는 아무 변화가 없다(이슈 #17 의 유력 원인).  최근에 쓴 로그가 있는 쪽이
+    실제로 돌아가는 폴더다.
+    """
+    home = Path.home()
+    here = user_dir.resolve()
+    mine = _newest_log_time(user_dir)
+    others = []
+    for name, parts in OTHER_USER_DIRS:
+        candidate = home.joinpath(*parts)
+        if not candidate.is_dir() or candidate.resolve() == here:
+            continue
+        stamp = _newest_log_time(candidate)
+        if stamp:
+            others.append((stamp, name, candidate))
+    # azahar.exe 옆의 포터블 user 폴더
+    for exe_dir in (Path("C:/Program Files/Azahar"), Path("C:/Program Files (x86)/Azahar")):
+        candidate = exe_dir / "user"
+        if candidate.is_dir() and candidate.resolve() != here:
+            others.append((_newest_log_time(candidate), "포터블(azahar.exe 옆 user)", candidate))
+    if not others:
+        return Check("다른 에뮬레이터 폴더", "O", "발견되지 않음")
+    newer = [item for item in others if item[0] > mine]
+    text = ", ".join(f"{name} ({path})" for _, name, path in others)
+    if newer:
+        return Check(
+            "다른 에뮬레이터 폴더",
+            "X",
+            f"{text} — 이 폴더의 로그가 더 최근입니다. 게임이 그쪽 폴더로 실행되고 있으므로 "
+            "설치.cmd 를 그 폴더를 지정해 다시 실행하세요: 설치.cmd \"<폴더경로>\"",
+            True,
+        )
+    return Check("다른 에뮬레이터 폴더", "!", f"{text} — 사용 흔적은 더 오래됐습니다.")
+
+
+def _check_save_states(user_dir: Path) -> Check:
+    """세이브 스테이트를 불러오면 패치 전 화면이 그대로 살아난다."""
+    states = _find_path(user_dir, "states")
+    dat = _find_path(user_dir, "load", "mods", BASE_TITLE_ID, "romfs", "CULDCEPT.DAT")
+    if states is None or not states.is_dir():
+        return Check("세이브 스테이트", "O", "없음")
+    files = [item for item in states.glob(f"{BASE_TITLE_ID}*.cst") if item.is_file()]
+    if not files:
+        return Check("세이브 스테이트", "O", "없음")
+    if dat is not None and dat.is_file():
+        stale = [item for item in files if item.stat().st_mtime < dat.stat().st_mtime]
+        if stale:
+            return Check(
+                "세이브 스테이트",
+                "!",
+                f"{len(stale)}개가 패치본보다 오래됐습니다. 스테이트를 불러오면 "
+                "패치 전 텍스트와 DLC 목록이 그대로 살아납니다 — 반드시 게임을 새로 시작하세요.",
+            )
+    return Check("세이브 스테이트", "O", f"{len(files)}개(패치본보다 최신)")
+
+
 def inspect_install(user_dir: Path) -> list[Check]:
     return [
         _check_base(user_dir),
+        _check_card_db(user_dir),
         _check_catalog(user_dir),
         _check_direct_ips(user_dir),
         _check_wrong_base_placement(user_dir),
         _check_installed_dlc(user_dir),
         _check_virtual_sd(user_dir),
+        _check_other_user_dirs(user_dir),
+        _check_save_states(user_dir),
         _check_log(user_dir),
     ]
 

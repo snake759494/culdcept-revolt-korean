@@ -85,11 +85,36 @@ def clean_misplaced_dlc(az: Path, dry_run: bool = False) -> list[str]:
     return removed
 
 
+def clean_previous_install(az: Path, dry_run: bool = False) -> list[str]:
+    """이전 설치 흔적을 **처음부터 다시 깔 수 있게** 지운다(이슈 #17).
+
+    지우는 것은 우리가 만든 오버레이뿐이다.
+
+    * `load/mods/<DLC 타이틀>/`      — DLC 오버레이 전체(카탈로그 + IPS)
+    * `mods/<타이틀>/`               — `load/` 없이 쓰던 옛 경로의 잔재
+
+    사용자의 본편 패치 파일(`load/mods/<본편>/romfs/CULDCEPT.DAT`)은 본인이 xdelta
+    로 만든 것이라 다시 만들 수 없으므로 **절대 지우지 않는다.**
+    """
+    removed: list[str] = []
+    targets = [az / "load" / "mods" / DLC_TID,
+               az / "mods" / BASE_TID,
+               az / "mods" / DLC_TID]
+    for target in targets:
+        if target.is_dir():
+            if not dry_run:
+                shutil.rmtree(target)
+            removed.append(str(target))
+    return removed
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="컬드셉트 리볼트 한글패치 설치기")
     ap.add_argument("--azahar", help="Azahar 사용자 폴더 (미지정 시 자동 탐색)")
     ap.add_argument("--skip-dlc", action="store_true", help="DLC 오버레이를 설치하지 않음")
     ap.add_argument("--remove-dlc", action="store_true", help="DLC 오버레이만 제거")
+    ap.add_argument("--keep-old", action="store_true",
+                    help="이전 설치를 지우지 않고 덮어쓰기만 함(기본은 깨끗이 다시 설치)")
     a = ap.parse_args()
 
     az = find_azahar(a.azahar)
@@ -107,6 +132,19 @@ def main() -> int:
         else:
             print("DLC 오버레이가 설치되어 있지 않습니다.")
         return 0
+
+    # ── 이전 설치 정리(기본 동작) ───────────────────────
+    # 버전을 거듭하며 폴더가 뒤섞여 무엇이 적용 중인지 알 수 없게 되는 일이
+    # 반복됐다(이슈 #17). 기본적으로 우리가 깐 오버레이를 먼저 싹 지우고 새로
+    # 깐다. 본편 CULDCEPT.DAT 은 사용자 자산이므로 건드리지 않는다.
+    if not a.keep_old:
+        wiped = clean_previous_install(az)
+        if wiped:
+            print("이전 설치 정리:")
+            for item in wiped:
+                print(f"  - {item}")
+        else:
+            print("이전 설치: 없음")
 
     # ── 본편 폴더에 잘못 들어간 DLC 파일 정리 ───────────
     # 이걸 두면 Azahar 가 본편 RomFS 에서 IPS 를 수만 번 건너뛰고 카탈로그를

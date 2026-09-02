@@ -27,6 +27,11 @@ class InstallVerifierTests(unittest.TestCase):
         content = sdmc_root / "Nintendo 3DS" / "id0" / "id1" / "title" / "0004008c" / "000f5700" / "content" / "00000000"
         content.mkdir(parents=True)
         (content / "00000000.app").write_bytes(b"app")
+        # .app 만으로는 Azahar 가 DLC 를 인식하지 못한다 — .tmd 와 티켓이 함께 있어야 한다.
+        (content.parent / "00000000.tmd").write_bytes(b"tmd")
+        tickets = root / "nand" / "dbs" / "ticket.db"
+        tickets.mkdir(parents=True)
+        (tickets / "0004008C000F5700.0004.tik").write_bytes(b"tik")
         config = root / "config"
         config.mkdir()
         settings = "use_virtual_sd=true\n"
@@ -158,3 +163,82 @@ class InstallVerifierTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeepDiagnosticTests(unittest.TestCase):
+    """이슈 #17: 파일은 다 있는데 게임에는 반영이 안 되는 상태를 잡아내는 검사."""
+
+    def _dat_with_card_db(self, translated: bool) -> bytes:
+        from culdcept import huffman
+        from verify_install import CARD_DB_SECTIONS
+
+        buf = bytearray(b"\x20" * 253_634)
+        if not translated:
+            # s0(카드 이름·능력)만 원문 가나로 채운다 = 카드 DB 미번역 상태
+            label, start, length, _ = CARD_DB_SECTIONS[0]
+            buf[start:start + length] = (b"\x82\xa0" * (length // 2))[:length]
+        blob = huffman.compress(bytes(buf), typ=0x0c)
+        count = 1200
+        table = bytearray(count * 8)
+        for index in range(count):
+            struct.pack_into("<II", table, index * 8, count * 8, 0)
+        struct.pack_into("<II", table, 1190 * 8, len(table), len(blob))
+        return bytes(table) + blob
+
+    def _user_dir(self, translated: bool):
+        temp = tempfile.TemporaryDirectory()
+        root = Path(temp.name)
+        base = root / "load" / "mods" / "00040000000F5700" / "romfs"
+        base.mkdir(parents=True)
+        (base / "CULDCEPT.DAT").write_bytes(self._dat_with_card_db(translated))
+        return temp, root
+
+    def test_untranslated_card_db_is_reported(self):
+        from verify_install import _check_card_db
+
+        temp, root = self._user_dir(translated=False)
+        with temp:
+            check = _check_card_db(root)
+        self.assertEqual(check.status, "X")
+        self.assertTrue(check.blocking)
+        self.assertIn("카드 이름", check.detail)
+
+    def test_translated_card_db_passes(self):
+        from verify_install import _check_card_db
+
+        temp, root = self._user_dir(translated=True)
+        with temp:
+            check = _check_card_db(root)
+        self.assertEqual(check.status, "O")
+
+    def test_stale_save_state_is_flagged(self):
+        import os
+        import time
+        from verify_install import _check_save_states
+
+        temp, root = self._user_dir(translated=True)
+        with temp:
+            states = root / "states"
+            states.mkdir()
+            state = states / "00040000000F5700.01.cst"
+            state.write_bytes(b"state")
+            old = time.time() - 86_400
+            os.utime(state, (old, old))
+            check = _check_save_states(root)
+        self.assertEqual(check.status, "!")
+        self.assertIn("스테이트", check.detail)
+
+    def test_missing_dlc_ticket_is_reported(self):
+        from verify_install import _check_installed_dlc
+
+        temp = tempfile.TemporaryDirectory()
+        with temp:
+            root = Path(temp.name)
+            content = (root / "sdmc" / "Nintendo 3DS" / "id0" / "id1" / "title"
+                       / "0004008c" / "000f5700" / "content" / "00000000")
+            content.mkdir(parents=True)
+            (content / "00000000.app").write_bytes(b"app")
+            (content.parent / "00000000.tmd").write_bytes(b"tmd")
+            check = _check_installed_dlc(root)
+        self.assertEqual(check.status, "X")
+        self.assertIn("티켓", check.detail)
