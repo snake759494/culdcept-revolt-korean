@@ -747,22 +747,27 @@ def _choose_split(toks, dist_nsym, dist_nbits):
 
 
 def _total_cost(toks, dist_nsym, dist_nbits):
-    return sum(_block_cost(ch, dist_nsym, dist_nbits)
-               for ch in _split_blocks(toks, _DEFAULT_BUDGET))
+    """Bits the token list would actually cost, under the best block split."""
+    return _choose_split(toks, dist_nsym, dist_nbits)[1]
+
+
+# effort -> (hash-chain depth, "good enough" match length, re-parse rounds,
+#            how many lengths per candidate the optimal parse may try)
+_EFFORT = {
+    0: (16, 32, 0, 24),
+    1: (64, 64, 1, 32),
+    2: (256, 200, 3, 48),
+    3: (1024, 255, 6, 256),
+}
+_MAX_EFFORT = 3
 
 
 def _parse_tokens(data, max_dist, dist_nsym, dist_nbits, effort):
     n = len(data)
-    if effort <= 0:
-        chain, nice, iters, opts = 16, 32, 0, 24
-    elif effort == 1:
-        chain, nice, iters, opts = 64, 64, 1, 32
-    else:
-        chain, nice, iters, opts = 256, 200, 3, 48
-        if n > 1 << 16:                    # keep the pure-python runtime sane
-            chain, nice, iters, opts = 64, 96, 2, 32
-        if n > 1 << 18:
-            chain, nice, iters, opts = 32, 64, 1, 24
+    chain, nice, iters, opts = _EFFORT[max(0, min(_MAX_EFFORT, effort))]
+    if n > 1 << 18:                        # keep the pure-python runtime sane
+        chain = min(chain, 64)
+        nice = min(nice, 96)
     cands = _lz_matches(data, max_dist, chain, nice)
     best = _greedy_parse(data, cands)
     bestc = _total_cost(best, dist_nsym, dist_nbits)
@@ -780,16 +785,7 @@ def _parse_tokens(data, max_dist, dist_nsym, dist_nbits, effort):
     return best
 
 
-def compress_real(data, typ=0x0c, effort=2):
-    """Really compress `data` into a type-0x08/0x0c entry (header + stream).
-
-    effort 0 = fast greedy, 1 = one optimal-parse pass, 2 = full (default).
-    Guarantees decompress(compress_real(x, t)) == x for every x.
-    """
-    if typ not in (0x08, 0x0c):
-        raise ValueError("typ must be 0x08 or 0x0c")
-    data = bytes(data)
-    window = 0x10 if typ == 0x0c else 0x0d
+def _encode(data, typ, window, effort):
     max_dist = 1 << window
     dist_nsym = window + 1
     dist_nbits = (window + 1 - 10) & 5
@@ -800,6 +796,34 @@ def compress_real(data, typ=0x0c, effort=2):
         for chunk in parts:
             _emit_block(bw, chunk, dist_nsym, dist_nbits)
     return bytes([typ]) + _emit_varint(len(data)) + bw.getbytes() + b'\x00'
+
+
+def compress_real(data, typ=0x0c, effort=2, budget=None):
+    """Really compress `data` into a type-0x08/0x0c entry (header + stream).
+
+    effort 0 = fast greedy .. 3 = deepest search (slowest).  2 is the default.
+
+    `budget`, when given, is a hard byte target (normally the original section's
+    length).  Effort is then escalated up to 3 until the result fits, and the
+    smallest encoding found is returned -- check `len(result) <= budget`
+    yourself, the function does not raise.
+
+    Guarantees decompress(compress_real(x, t)) == x for every x.
+    """
+    if typ not in (0x08, 0x0c):
+        raise ValueError("typ must be 0x08 or 0x0c")
+    data = bytes(data)
+    window = 0x10 if typ == 0x0c else 0x0d
+    best = _encode(data, typ, window, effort)
+    if budget is None:
+        return best
+    e = effort
+    while len(best) > budget and e < _MAX_EFFORT:
+        e += 1
+        cand = _encode(data, typ, window, e)
+        if len(cand) < len(best):
+            best = cand
+    return best
 
 
 if __name__ == "__main__":
