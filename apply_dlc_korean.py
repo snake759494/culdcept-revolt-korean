@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from culdcept import dat as datmod
+from culdcept import dlcres
 from culdcept import font as fontmod
 from culdcept import huffman
 from culdcept import wansung
@@ -438,7 +439,11 @@ def patch_resource_title(
     patched = bytearray(data)
     start = RESOURCE_TITLE_OFFSET
     patched[start:start + RESOURCE_TITLE_SIZE] = encoded.ljust(RESOURCE_TITLE_SIZE, b"\0")
-    return bytes(patched)
+    # ★ 헤더 0x00 의 무결성 값(CRC-32)을 반드시 다시 계산한다.
+    # 이걸 빠뜨려서 게임이 리소스를 전부 거부했고, DLC 가 통째로 사라진 것처럼
+    # 보였다(이슈 #19/#20/#21). 제목을 유효한 일본어로 바꿫도 똑같이 거부됐던
+    # 이유가 이것이다 — 글자가 아니라 CRC 문제였다.
+    return dlcres.fix_crc(bytes(patched))
 
 
 def make_ips_patch(source: bytes, target: bytes) -> bytes:

@@ -90,19 +90,15 @@ def clean_misplaced_dlc(az: Path, dry_run: bool = False) -> list[str]:
     return removed
 
 
-# ── DLC 오버레이는 더 이상 설치하지 않는다 (이슈 #19/#20/#21) ─────────────────
-# 실기에서 다섯 가지 조합으로 확인한 결과다.
+# ── DLC 오버레이: 검증하며 설치한다 (이슈 #19~#22) ──────────────────────────
+# DLC 리소스 파일은 헤더 0x00 에 CRC-32 무결성 값을 갖는다. 예전 패치는 제목만 바꾸고
+# 이 값을 갱신하지 않아 게임이 리소스를 전부 거부했고, 그 결과 DLC 가 통째로 사라진
+# 것처럼 보였다. 제목을 유효한 일본어로 바꿔도 같은 증상이라 인코딩 문제로 오인했었다.
 #
-#   오버레이 없음                     -> DLC 정상
-#   카탈로그만                        -> DLC 정상 (단, Azahar 가 DLC 타이틀에는
-#                                        romfs 교체를 적용하지 않아 번역이 먹지도 않음)
-#   IPS 108개(내용 없는 빈 패치)       -> DLC 정상
-#   IPS 108개(한글 제목)              -> DLC 통째로 사라짐
-#   IPS 108개(제목만 다른 **일본어**)  -> DLC 통째로 사라짐
-#
-# 마지막 줄이 핵심이다. 정상적인 일본어로 바꿔도 사라지므로 글자 문제가 아니라
-# **리소스 헤더를 건드리는 것 자체가 거부된다**(파일 앞 4바이트가 무결성 값).
-# 따라서 DLC 이름 번역은 이 방식으로는 불가능하고, 오버레이는 손해만 남는다.
+# 이제 apply_dlc_text.py 가 CRC 를 다시 계산한다. 그래도 안전장치를 둔다 — 설치 시
+# 사용자의 실제 DLC 에 IPS 를 적용해 보고 **게임의 검사(CRC + Shift-JIS 제목)를
+# 통과하는 것만** 설치한다. 통과하지 못하는 항목은 조용히 빼므로, 이 오버레이 때문에
+# DLC 가 사라지는 일은 구조적으로 다시 생길 수 없다.
 
 
 def clean_previous_install(az: Path, dry_run: bool = False) -> list[str]:
@@ -197,9 +193,90 @@ def install_update_code(az: Path) -> str:
     return f"업데이트 실행코드 카드 DB 한글화 → {target} ({len(patched):,}바이트)"
 
 
+def install_dlc_overlay(az: Path, dlc_dst: Path) -> str:
+    """DLC 이름 번역 IPS 를, 사용자의 실제 DLC 에 적용해 보고 통과하는 것만 설치한다."""
+    src = HERE / "dlc_overlay" / DLC_TID / "romfs_ext"
+    if not src.is_dir():
+        return "DLC 이름 번역: 이 패키지에 없음 — 건너뜀"
+
+    content = find_installed_dlc_content(az)
+    if content is None:
+        if dlc_dst.is_dir():
+            shutil.rmtree(dlc_dst)
+        return "DLC 이름 번역: DLC 가 설치돼 있지 않아 건너뜀"
+
+    try:
+        sys.path.insert(0, str(HERE))
+        from culdcept import dlcres
+        import apply_update_code as ips
+    except Exception as exc:                      # noqa: BLE001
+        return f"DLC 이름 번역: 도구를 불러오지 못해 건너뜀 ({exc})"
+
+    originals = collect_dlc_resources(content)
+    if dlc_dst.is_dir():
+        shutil.rmtree(dlc_dst)
+    out = dlc_dst / "romfs_ext"
+    out.mkdir(parents=True, exist_ok=True)
+
+    good = bad = missing = 0
+    for patch in sorted(src.glob("*.ips")):
+        name = patch.name[:-4]
+        raw = originals.get(name)
+        if raw is None:
+            missing += 1
+            continue
+        try:
+            result = ips.apply_ips_patch(raw, patch.read_bytes())
+            # 게임이 받아들일 파일인지 여기서 확인한다. 이게 최후의 안전장치다.
+            if len(result) != len(raw) or not dlcres.accepted(result):
+                bad += 1
+                continue
+        except Exception:                          # noqa: BLE001
+            bad += 1
+            continue
+        shutil.copy2(patch, out / patch.name)
+        good += 1
+
+    note = f"DLC 이름 번역: {good}개 설치"
+    if bad:
+        note += f" / 검사 불합격 {bad}개 제외"
+    if missing:
+        note += f" / 해당 리소스 없음 {missing}개"
+    return note
+
+
+def find_installed_dlc_content(az: Path):
+    sd = az / "sdmc" / "Nintendo 3DS"
+    if not sd.is_dir():
+        return None
+    for id0 in sd.iterdir():
+        if not id0.is_dir():
+            continue
+        for id1 in id0.iterdir():
+            content = id1 / "title" / "0004008c" / "000f5700" / "content"
+            if content.is_dir() and any(content.rglob("*.app")):
+                return content
+    return None
+
+
+def collect_dlc_resources(content: Path) -> dict:
+    """설치된 DLC .app 들에서 리소스 파일을 이름 -> 바이트로 모은다."""
+    sys.path.insert(0, str(HERE))
+    from apply_dlc_text import RESOURCE_EXT, romfs_files
+
+    out = {}
+    for app_path in sorted(content.rglob("*.app")):
+        app = app_path.read_bytes()
+        for name, offset, size in romfs_files(app):
+            if name.lower().endswith(RESOURCE_EXT):
+                out.setdefault(name, app[offset:offset + size])
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="컬드셉트 리볼트 한글패치 설치기")
     ap.add_argument("--azahar", help="Azahar 사용자 폴더 (미지정 시 자동 탐색)")
+    ap.add_argument("--skip-dlc", action="store_true", help="DLC 이름 번역 없이 설치")
     ap.add_argument("--remove-dlc", action="store_true", help="DLC 오버레이만 제거하고 종료")
     ap.add_argument("--keep-old", action="store_true",
                     help="이전 설치를 지우지 않고 덮어쓰기만 함(기본은 깨끗이 다시 설치)")
@@ -245,13 +322,13 @@ def main() -> int:
     else:
         print("본편 폴더 오배치: 없음")
 
-    # ── DLC 오버레이: 설치하지 않고, 있으면 제거한다 ────
-    if dlc_dst.is_dir():
-        shutil.rmtree(dlc_dst)
-        print(f"DLC 오버레이 제거: {dlc_dst}")
-        print("  (DLC 이름 번역은 DLC 를 통째로 사라지게 만들어 중단했습니다 — 위 주석 참고)")
+    # ── DLC 오버레이 ────────────────────────────────────
+    if a.skip_dlc:
+        if dlc_dst.is_dir():
+            shutil.rmtree(dlc_dst)
+        print("DLC 이름 번역: 건너뜀(--skip-dlc)")
     else:
-        print("DLC 오버레이: 설치하지 않음 (DLC 가 사라지는 문제로 중단)")
+        print(install_dlc_overlay(az, dlc_dst))
 
     # ── 게임 업데이트(ver 1.2) 실행코드 ─────────────────
     print(install_update_code(az))

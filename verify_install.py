@@ -48,7 +48,6 @@ EXPECTED_DIRECT_IPS = 108
 BASE_CARD_PROBES = ((84608, 16), (103135, 12), (183653, 6))
 BASE_CONFIRM_TAILS = ((211679, 31), (211711, 29))
 LOG_GLOB = "azahar_log*.txt"
-CATALOG_REPEAT_WARNING_THRESHOLD = 50
 FATAL_DIRECT_PATCH_PC = "0x00122204"
 RESOURCE_PAYLOAD_OFFSET_FIELD = 0x2B
 
@@ -171,25 +170,74 @@ def _catalog_sjis_failures(data: bytes, count: int) -> int:
 
 
 def _check_catalog(user_dir: Path) -> Check:
-    """DLC 오버레이가 남아 있으면 **DLC 가 통째로 사라진다**(이슈 #19/#20/#21).
+    """DLC 이름 번역 오버레이가 **게임 검사를 통과하는지**까지 확인한다.
 
-    실기에서 다섯 조합으로 확인했다. 오버레이 없음 / 카탈로그만 / 내용 없는 IPS 108개는
-    모두 DLC 정상, 한글 제목 IPS 와 **제목만 다른 일본어 IPS** 는 둘 다 DLC 가 사라진다.
-    글자 문제가 아니라 리소스 헤더를 건드리는 것 자체가 거부된다(파일 앞 4바이트가
-    무결성 값). 게다가 Azahar 는 DLC 타이틀에 romfs 교체를 적용하지 않아 카탈로그
-    번역은 먹지도 않는다. 그래서 이 폴더는 이득 없이 손해만 남는다.
+    DLC 리소스 파일은 헤더 0x00 에 CRC-32 무결성 값이 있다. 이걸 갱신하지 않고 제목만
+    바꾸면 게임이 리소스를 전부 거부해 DLC 가 통째로 사라진 것처럼 보인다(이슈 #19~#22).
+    그래서 파일이 있는지만 보지 않고, 실제로 IPS 를 적용해 CRC 와 Shift-JIS 제목 검사를
+    통과하는지 직접 확인한다.
     """
-    folder = _find_path(user_dir, "load", "mods", DLC_TITLE_ID)
+    folder = _find_path(user_dir, "load", "mods", DLC_TITLE_ID, "romfs_ext")
     if folder is None or not folder.is_dir():
-        return Check("DLC 오버레이", "O", "없음 (정상 — DLC 가 제대로 나옵니다)")
-    files = sum(1 for item in folder.rglob("*") if item.is_file())
-    return Check(
-        "DLC 오버레이",
-        "X",
-        f"{folder} 에 파일 {files}개가 남아 있습니다 — 이 폴더가 있으면 게임에서 "
-        "★DLC 가 통째로 사라집니다★. 설치.cmd 를 실행하면 지워집니다.",
-        True,
-    )
+        return Check("DLC 이름 번역", "!", "설치되지 않음 — DLC 항목 이름이 원문으로 나옵니다")
+    patches = sorted(folder.glob("*.ips"))
+    if not patches:
+        return Check("DLC 이름 번역", "!", "IPS 가 없습니다")
+
+    content = _find_installed_dlc_content(user_dir)
+    if content is None:
+        return Check("DLC 이름 번역", "!", f"{len(patches)}개 설치됨 (DLC 본체가 없어 검사 생략)")
+
+    try:
+        from apply_dlc_text import RESOURCE_EXT, romfs_files
+        from apply_update_code import apply_ips_patch
+        from culdcept import dlcres
+    except Exception as exc:                       # noqa: BLE001
+        return Check("DLC 이름 번역", "!", f"{len(patches)}개 설치됨 (검사 도구 없음: {exc})")
+
+    originals = {}
+    for app_path in sorted(content.rglob("*.app")):
+        app = app_path.read_bytes()
+        for name, offset, size in romfs_files(app):
+            if name.lower().endswith(RESOURCE_EXT):
+                originals.setdefault(name, app[offset:offset + size])
+
+    ok = bad = 0
+    for patch in patches:
+        raw = originals.get(patch.name[:-4])
+        if raw is None:
+            continue
+        try:
+            result = apply_ips_patch(raw, patch.read_bytes())
+            if len(result) == len(raw) and dlcres.accepted(result):
+                ok += 1
+            else:
+                bad += 1
+        except Exception:                          # noqa: BLE001
+            bad += 1
+    if bad:
+        return Check(
+            "DLC 이름 번역",
+            "X",
+            f"{ok}개 정상 / {bad}개가 게임 검사(CRC·제목)를 통과하지 못합니다 — "
+            "이 상태로 두면 ★DLC 가 통째로 사라집니다★. 설치.cmd 를 다시 실행하세요.",
+            True,
+        )
+    return Check("DLC 이름 번역", "O", f"{ok}개 — 게임 검사(CRC·Shift-JIS 제목) 통과")
+
+
+def _find_installed_dlc_content(user_dir: Path):
+    sdmc = _find_path(user_dir, "sdmc", "Nintendo 3DS")
+    if sdmc is None or not sdmc.is_dir():
+        return None
+    for id0 in sdmc.iterdir():
+        if not id0.is_dir():
+            continue
+        for id1 in id0.iterdir():
+            content = _find_path(id1, "title", "0004008c", "000f5700", "content")
+            if content is not None and content.is_dir() and any(content.rglob("*.app")):
+                return content
+    return None
 
 
 def _check_catalog_unused(user_dir: Path) -> Check:
@@ -493,32 +541,20 @@ def _check_log(user_dir: Path) -> Check:
         markers.append("본편 DAT 적용 확인")
     if "layeredfs patched file" in folded:
         markers.append("IPS 적용 로그 확인")
+    # DLC IPS 는 108개 콘텐츠마다 전부 시도되므로 "건너뜀"이 수만 건 나오는 것이 정상이다.
+    # 예전에는 이걸 이상 징후로 봤지만, 실제 원인은 따로 있었다(헤더 CRC 미갱신).
     skipped_patches = folded.count("original file for patch")
     if skipped_patches:
-        markers.append(f"미설치 DLC용 IPS {skipped_patches}건 건너뜀")
-    catalog_hits = folded.count(
-        "layeredfs replacement file in use for /contentinfoarchive_jpn_ja.bin"
-    )
-    process_cleanups = folded.count("cleaning up process")
-    suspicious_loop = (
-        catalog_hits >= CATALOG_REPEAT_WARNING_THRESHOLD and process_cleanups > 0
-    )
-    if suspicious_loop:
-        markers.append(
-            f"카탈로그 반복 접근 {catalog_hits}회 후 프로세스 정리 — 프리징 의심"
-        )
+        markers.append(f"DLC IPS 대조 {skipped_patches}건(정상)")
+    # 예전에는 카탈로그 반복 접근을 프리징 징후로 봤으나, 실제 원인은 리소스 헤더의
+    # CRC 미갱신이었다(이슈 #22에서 규명). 카탈로그를 항목 수만큼 읽는 것은 정상이라
+    # 이 휴리스틱은 거짓 경보만 냈다 — 제거한다.
     if not markers:
         names = ", ".join(name for name, _ in chunks)
         return Check("Azahar 로그", "!", f"{names}: LayeredFS 적용 로그가 없습니다. 게임을 한 번 실행한 뒤 다시 검사하세요.")
     names = ", ".join(name for name, _ in chunks)
-    status = "!" if suspicious_loop else "O"
     detail = f"{names}: " + ", ".join(markers)
-    if suspicious_loop:
-        detail += (
-            "; 이 로그는 게임을 껐다 켜기 전 기록일 수 있습니다."
-            " 설치.cmd 를 한 번 실행해 본편 폴더 오배치를 정리한 뒤,"
-            " Azahar 를 완전히 종료하고 새로 부팅해 다시 검사하세요."
-        )
+    status = "O"
     return Check("Azahar 로그", status, detail)
 
 
