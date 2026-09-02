@@ -8,7 +8,7 @@
 
     python install_patch.py                     # 자동 탐색 + 설치
     python install_patch.py --azahar <경로>      # 폴더 직접 지정
-    python install_patch.py --skip-dlc          # DLC 오버레이 없이 본편만
+    python install_patch.py --remove-dlc         # DLC 오버레이만 제거하고 종료
     python install_patch.py --remove-dlc        # DLC 오버레이만 제거
 
 본편 `CULDCEPT.DAT` 는 저작권상 배포할 수 없으므로, 본인이 xdelta 를 적용해 만든
@@ -88,6 +88,21 @@ def clean_misplaced_dlc(az: Path, dry_run: bool = False) -> list[str]:
             shutil.rmtree(ext)
         removed.append(f"{ext} (romfs_ext 폴더)")
     return removed
+
+
+# ── DLC 오버레이는 더 이상 설치하지 않는다 (이슈 #19/#20/#21) ─────────────────
+# 실기에서 다섯 가지 조합으로 확인한 결과다.
+#
+#   오버레이 없음                     -> DLC 정상
+#   카탈로그만                        -> DLC 정상 (단, Azahar 가 DLC 타이틀에는
+#                                        romfs 교체를 적용하지 않아 번역이 먹지도 않음)
+#   IPS 108개(내용 없는 빈 패치)       -> DLC 정상
+#   IPS 108개(한글 제목)              -> DLC 통째로 사라짐
+#   IPS 108개(제목만 다른 **일본어**)  -> DLC 통째로 사라짐
+#
+# 마지막 줄이 핵심이다. 정상적인 일본어로 바꿔도 사라지므로 글자 문제가 아니라
+# **리소스 헤더를 건드리는 것 자체가 거부된다**(파일 앞 4바이트가 무결성 값).
+# 따라서 DLC 이름 번역은 이 방식으로는 불가능하고, 오버레이는 손해만 남는다.
 
 
 def clean_previous_install(az: Path, dry_run: bool = False) -> list[str]:
@@ -185,8 +200,7 @@ def install_update_code(az: Path) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="컬드셉트 리볼트 한글패치 설치기")
     ap.add_argument("--azahar", help="Azahar 사용자 폴더 (미지정 시 자동 탐색)")
-    ap.add_argument("--skip-dlc", action="store_true", help="DLC 오버레이를 설치하지 않음")
-    ap.add_argument("--remove-dlc", action="store_true", help="DLC 오버레이만 제거")
+    ap.add_argument("--remove-dlc", action="store_true", help="DLC 오버레이만 제거하고 종료")
     ap.add_argument("--keep-old", action="store_true",
                     help="이전 설치를 지우지 않고 덮어쓰기만 함(기본은 깨끗이 다시 설치)")
     a = ap.parse_args()
@@ -231,23 +245,13 @@ def main() -> int:
     else:
         print("본편 폴더 오배치: 없음")
 
-    # ── DLC 오버레이 (선택) ─────────────────────────────
-    if a.skip_dlc:
-        print("DLC 오버레이: 건너뜀(--skip-dlc)")
+    # ── DLC 오버레이: 설치하지 않고, 있으면 제거한다 ────
+    if dlc_dst.is_dir():
+        shutil.rmtree(dlc_dst)
+        print(f"DLC 오버레이 제거: {dlc_dst}")
+        print("  (DLC 이름 번역은 DLC 를 통째로 사라지게 만들어 중단했습니다 — 위 주석 참고)")
     else:
-        # 패키지에는 `load` 폴더를 두지 않는다. 사용자가 이걸 통째로 끌어다 놓다가
-        # 기존 load/mods/<본편> 이 지워져 게임이 전부 원문으로 돌아간 사고가 있었다(#14).
-        newstyle = HERE / "dlc_overlay" / DLC_TID
-        oldstyle = HERE / "load"
-        if newstyle.is_dir():
-            n = copy_tree_no_delete(newstyle, dlc_dst)
-            print(f"DLC 오버레이 파일 {n}개 복사 → {dlc_dst}")
-            print("  (게임에서 DLC 가 안 보이면 `설치.cmd --skip-dlc` 로 이 폴더 없이 설치하세요)")
-        elif oldstyle.is_dir():                       # 구버전 패키지 호환
-            n = copy_tree_no_delete(oldstyle, az)
-            print(f"DLC 오버레이 파일 {n}개 복사 (구버전 배치)")
-        else:
-            print("DLC 오버레이가 이 패키지에 없습니다 — 건너뜀")
+        print("DLC 오버레이: 설치하지 않음 (DLC 가 사라지는 문제로 중단)")
 
     # ── 게임 업데이트(ver 1.2) 실행코드 ─────────────────
     print(install_update_code(az))

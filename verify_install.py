@@ -171,6 +171,28 @@ def _catalog_sjis_failures(data: bytes, count: int) -> int:
 
 
 def _check_catalog(user_dir: Path) -> Check:
+    """DLC 오버레이가 남아 있으면 **DLC 가 통째로 사라진다**(이슈 #19/#20/#21).
+
+    실기에서 다섯 조합으로 확인했다. 오버레이 없음 / 카탈로그만 / 내용 없는 IPS 108개는
+    모두 DLC 정상, 한글 제목 IPS 와 **제목만 다른 일본어 IPS** 는 둘 다 DLC 가 사라진다.
+    글자 문제가 아니라 리소스 헤더를 건드리는 것 자체가 거부된다(파일 앞 4바이트가
+    무결성 값). 게다가 Azahar 는 DLC 타이틀에 romfs 교체를 적용하지 않아 카탈로그
+    번역은 먹지도 않는다. 그래서 이 폴더는 이득 없이 손해만 남는다.
+    """
+    folder = _find_path(user_dir, "load", "mods", DLC_TITLE_ID)
+    if folder is None or not folder.is_dir():
+        return Check("DLC 오버레이", "O", "없음 (정상 — DLC 가 제대로 나옵니다)")
+    files = sum(1 for item in folder.rglob("*") if item.is_file())
+    return Check(
+        "DLC 오버레이",
+        "X",
+        f"{folder} 에 파일 {files}개가 남아 있습니다 — 이 폴더가 있으면 게임에서 "
+        "★DLC 가 통째로 사라집니다★. 설치.cmd 를 실행하면 지워집니다.",
+        True,
+    )
+
+
+def _check_catalog_unused(user_dir: Path) -> Check:
     path = _find_path(user_dir, "load", "mods", DLC_TITLE_ID, "romfs", CATALOG_NAME)
     if path is None or not path.is_file():
         return Check(
@@ -730,7 +752,6 @@ def inspect_install(user_dir: Path) -> list[Check]:
         _check_card_db(user_dir),
         _check_update_code(user_dir),
         _check_catalog(user_dir),
-        _check_direct_ips(user_dir),
         _check_wrong_base_placement(user_dir),
         _check_installed_dlc(user_dir),
         _check_virtual_sd(user_dir),

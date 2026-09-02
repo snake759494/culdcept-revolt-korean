@@ -47,28 +47,6 @@ class InstallVerifierTests(unittest.TestCase):
         )
         return temp, root
 
-    def test_catalog_only_install_is_accepted(self):
-        temp, root = self._make_user_dir()
-        try:
-            checks = inspect_install(root)
-            by_label = {check.label: check for check in checks}
-            self.assertEqual(by_label["DLC 카탈로그"].status, "O")
-            self.assertEqual(by_label["DLC 직접 리소스 IPS"].status, "O")
-            self.assertIn("호환(카탈로그 전용)", by_label["DLC 직접 리소스 IPS"].detail)
-            self.assertEqual(by_label["실제 DLC 설치"].status, "O")
-        finally:
-            temp.cleanup()
-
-    def test_full_install_requires_exactly_108_ips(self):
-        temp, root = self._make_user_dir(full_mode=True)
-        try:
-            checks = inspect_install(root)
-            by_label = {check.label: check for check in checks}
-            self.assertEqual(by_label["DLC 직접 리소스 IPS"].status, "O")
-            self.assertIn("전체 모드", by_label["DLC 직접 리소스 IPS"].detail)
-        finally:
-            temp.cleanup()
-
     def test_dlc_in_base_folder_is_reported(self):
         temp, root = self._make_user_dir()
         try:
@@ -102,29 +80,6 @@ class InstallVerifierTests(unittest.TestCase):
             by_label = {check.label: check for check in checks}
             self.assertEqual(by_label["Azahar 로그"].status, "!")
             self.assertIn("프리징 의심", by_label["Azahar 로그"].detail)
-        finally:
-            temp.cleanup()
-
-    def test_malformed_ips_are_reported(self):
-        temp, root = self._make_user_dir(full_mode=True)
-        try:
-            bad = root / "load" / "mods" / "0004008c000f5700" / "romfs_ext" / "resource_000.ips"
-            bad.write_bytes(b"not-an-ips")
-            checks = inspect_install(root)
-            by_label = {check.label: check for check in checks}
-            self.assertEqual(by_label["DLC 직접 리소스 IPS"].status, "X")
-        finally:
-            temp.cleanup()
-
-    def test_legacy_ips_that_overwrites_payload_offset_is_reported(self):
-        temp, root = self._make_user_dir(full_mode=True)
-        try:
-            bad = root / "load" / "mods" / "0004008c000f5700" / "romfs_ext" / "resource_000.dld.ips"
-            bad.write_bytes(b"PATCH\x00\x00\x2b\x00\x01\x00EOF")
-            checks = inspect_install(root)
-            by_label = {check.label: check for check in checks}
-            self.assertEqual(by_label["DLC 직접 리소스 IPS"].status, "X")
-            self.assertIn("0x2B", by_label["DLC 직접 리소스 IPS"].detail)
         finally:
             temp.cleanup()
 
@@ -321,45 +276,6 @@ class UpdateCodePatchTests(unittest.TestCase):
             make_ips_patch(b"abc", b"abcd")
 
 
-class CatalogEncodingTests(unittest.TestCase):
-    """이슈 #19/#20: 한글을 그대로 쓴 카탈로그는 DLC 목록을 통째로 날린다."""
-
-    def _catalog(self, text: str) -> bytes:
-        from verify_install import (CATALOG_FIELDS, CATALOG_RECORD_BASE,
-                                    CATALOG_RECORD_STRIDE, EXPECTED_CATALOG_SIZE)
-
-        data = bytearray(EXPECTED_CATALOG_SIZE)
-        struct.pack_into("<II", data, 0, 1, 108)
-        for index in range(108):
-            record = CATALOG_RECORD_BASE + index * CATALOG_RECORD_STRIDE
-            for offset, size in CATALOG_FIELDS:
-                encoded = text.encode("utf-8")[:size - 1]
-                data[record + offset:record + offset + size] = encoded.ljust(size, b"\0")
-        return bytes(data)
-
-    def _check(self, text: str):
-        from verify_install import _check_catalog
-
-        temp = tempfile.TemporaryDirectory()
-        with temp:
-            root = Path(temp.name)
-            romfs = root / "load" / "mods" / "0004008c000f5700" / "romfs"
-            romfs.mkdir(parents=True)
-            (romfs / "ContentInfoArchive_JPN_ja.bin").write_bytes(self._catalog(text))
-            return _check_catalog(root)
-
-    def test_hangul_catalog_is_rejected(self):
-        check = self._check("브로드라인")
-        self.assertEqual(check.status, "X")
-        self.assertIn("Shift-JIS", check.detail)
-        self.assertTrue(check.blocking)
-
-    def test_sjis_representable_catalog_passes(self):
-        # 한글 글리프가 들어앉은 한자로 적으면 변환에 성공한다.
-        check = self._check("崎稽球虞昔")
-        self.assertEqual(check.status, "O")
-
-
 class CatalogSjisSafeTests(unittest.TestCase):
     def test_to_sjis_safe_round_trips(self):
         from apply_dlc_korean import to_sjis_safe
@@ -374,3 +290,45 @@ class CatalogSjisSafeTests(unittest.TestCase):
         from apply_dlc_korean import to_sjis_safe
 
         to_sjis_safe("\u00b7", {}).encode("cp932")
+
+
+class DlcOverlayPolicyTests(unittest.TestCase):
+    """이슈 #19/#20/#21: DLC 오버레이가 남아 있으면 DLC 가 통째로 사라진다."""
+
+    def test_overlay_present_is_blocking(self):
+        from verify_install import _check_catalog
+
+        temp = tempfile.TemporaryDirectory()
+        with temp:
+            root = Path(temp.name)
+            folder = root / "load" / "mods" / "0004008c000f5700" / "romfs_ext"
+            folder.mkdir(parents=True)
+            (folder / "avatar_ALIEN.dla.ips").write_bytes(b"PATCHEOF")
+            check = _check_catalog(root)
+        self.assertEqual(check.status, "X")
+        self.assertTrue(check.blocking)
+        self.assertIn("사라집니다", check.detail)
+
+    def test_no_overlay_is_ok(self):
+        from verify_install import _check_catalog
+
+        temp = tempfile.TemporaryDirectory()
+        with temp:
+            check = _check_catalog(Path(temp.name))
+        self.assertEqual(check.status, "O")
+
+    def test_installer_removes_overlay(self):
+        import install_patch
+
+        temp = tempfile.TemporaryDirectory()
+        with temp:
+            root = Path(temp.name)
+            dlc = root / "load" / "mods" / "0004008c000f5700" / "romfs_ext"
+            dlc.mkdir(parents=True)
+            (dlc / "x.ips").write_bytes(b"PATCHEOF")
+            base = root / "load" / "mods" / "00040000000F5700" / "romfs"
+            base.mkdir(parents=True)
+            (base / "CULDCEPT.DAT").write_bytes(b"base")
+            install_patch.clean_previous_install(root)
+            self.assertFalse((root / "load" / "mods" / "0004008c000f5700").exists())
+            self.assertTrue((base / "CULDCEPT.DAT").is_file())
