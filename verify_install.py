@@ -21,6 +21,7 @@ anything in the Azahar user directory.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import struct
 import sys
 from dataclasses import dataclass
@@ -33,6 +34,12 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 BASE_TITLE_ID = "00040000000F5700"
+UPDATE_TITLE_ID = "0004000e000f5700"
+# 게임 업데이트(ver 1.2) 실행코드를 BLZ 해제한 것. 원본과 한글화본의 해시.
+UPDATE_CODE_SHA256 = "4b21f19242488e28b68dffdf29b65f8af32be2a58431a5031edaa8e8c74af6e1"
+UPDATE_CODE_KO_SHA256 = "ca235c5a162648e08a47caa60b151c39ce8fc02452d7d788f3abd45bc98e52ed"
+# 그 코드 안에서 카드 DB 가 놓인 구간(=엔트리 1190 의 s0 와 같은 길이).
+UPDATE_CARD_DB = (0x308578, 153786)
 DLC_TITLE_ID = "0004008c000f5700"
 CATALOG_NAME = "ContentInfoArchive_JPN_ja.bin"
 EXPECTED_CATALOG_SIZE = 21_808
@@ -610,10 +617,82 @@ def _check_save_states(user_dir: Path) -> Check:
     return Check("세이브 스테이트", "O", f"{len(files)}개(패치본보다 최신)")
 
 
+
+def _find_installed_update(user_dir: Path) -> Path | None:
+    """가상 SD 에 설치된 게임 업데이트(0004000e000f5700)를 찾는다."""
+    sdmc = _find_path(user_dir, "sdmc", "Nintendo 3DS")
+    if sdmc is None or not sdmc.is_dir():
+        return None
+    for id0 in sdmc.iterdir():
+        if not id0.is_dir():
+            continue
+        for id1 in id0.iterdir():
+            content = _find_path(id1, "title", "0004000e", "000f5700", "content")
+            if content is None or not content.is_dir():
+                continue
+            apps = [item for item in content.rglob("*.app") if item.is_file()]
+            if apps:
+                return max(apps, key=lambda item: item.stat().st_size)
+    return None
+
+
+def _check_update_code(user_dir: Path) -> Check:
+    """업데이트 실행코드 안의 카드 DB 가 한글로 바뀌었는지 본다(이슈 #17).
+
+    ver 1.2 업데이트에는 RomFS 가 없고 `.code` 만 있는데, 그 안에 카드 이름·능력·
+    설명이 통째로 들어 있다. 업데이트를 깔면 게임은 카드 텍스트를 CULDCEPT.DAT 이
+    아니라 이 실행코드에서 읽는다. 그래서 DAT 만 한글화하면 메뉴는 한글인데 카드만
+    원문으로 남는다 — 오래 잡히지 않던 증상의 정체다.
+    """
+    update = _find_installed_update(user_dir)
+    override = _find_path(user_dir, "load", "mods", BASE_TITLE_ID, "exefs", "code.bin")
+    if update is None:
+        if override is not None and override.is_file():
+            return Check(
+                "게임 업데이트 실행코드",
+                "X",
+                "업데이트가 설치돼 있지 않은데 exefs/code.bin 오버라이드가 있습니다. "
+                "설치.cmd 를 실행하면 정리됩니다.",
+                True,
+            )
+        return Check("게임 업데이트 실행코드", "O", "업데이트 미설치 — 카드 텍스트는 DAT 에서 읽습니다")
+
+    if override is None or not override.is_file():
+        return Check(
+            "게임 업데이트 실행코드",
+            "X",
+            f"게임 업데이트(ver 1.2)가 설치돼 있는데 한글화된 실행코드가 없습니다: {update.name}. "
+            "이 상태면 메뉴는 한글이지만 ★카드 이름·능력만 원문★ 으로 나옵니다. "
+            "설치.cmd 를 실행하세요.",
+            True,
+        )
+
+    data = override.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    if digest == UPDATE_CODE_KO_SHA256:
+        return Check("게임 업데이트 실행코드", "O", f"카드 DB 한글화 확인 ({len(data):,}바이트)")
+    if digest == UPDATE_CODE_SHA256:
+        return Check(
+            "게임 업데이트 실행코드",
+            "X",
+            "오버라이드가 원본 실행코드 그대로입니다 — 카드가 원문으로 나옵니다. 설치.cmd 를 실행하세요.",
+            True,
+        )
+    start, length = UPDATE_CARD_DB
+    if len(data) >= start + length:
+        left = _kana_count(data, start, length)
+        done = max(0, min(100, round((1 - left / 44986) * 100)))
+        status, blocking = ("O", False) if done >= 90 else ("X", True)
+        return Check("게임 업데이트 실행코드", status,
+                     f"카드 DB 번역률 {done}% (알려진 판과 다른 실행코드)", blocking)
+    return Check("게임 업데이트 실행코드", "!", f"알 수 없는 실행코드 ({len(data):,}바이트)")
+
+
 def inspect_install(user_dir: Path) -> list[Check]:
     return [
         _check_base(user_dir),
         _check_card_db(user_dir),
+        _check_update_code(user_dir),
         _check_catalog(user_dir),
         _check_direct_ips(user_dir),
         _check_wrong_base_placement(user_dir),

@@ -242,3 +242,80 @@ class DeepDiagnosticTests(unittest.TestCase):
             check = _check_installed_dlc(root)
         self.assertEqual(check.status, "X")
         self.assertIn("티켓", check.detail)
+
+
+class UpdateCodeTests(unittest.TestCase):
+    """이슈 #17 진짜 원인: ver 1.2 업데이트 실행코드 안의 카드 DB."""
+
+    def _user_dir(self, with_update: bool, override: bytes | None):
+        temp = tempfile.TemporaryDirectory()
+        root = Path(temp.name)
+        (root / "load" / "mods" / "00040000000F5700" / "romfs").mkdir(parents=True)
+        if with_update:
+            content = (root / "sdmc" / "Nintendo 3DS" / "id0" / "id1" / "title"
+                       / "0004000e" / "000f5700" / "content")
+            content.mkdir(parents=True)
+            (content / "00000001.app").write_bytes(b"update-app")
+        if override is not None:
+            exefs = root / "load" / "mods" / "00040000000F5700" / "exefs"
+            exefs.mkdir(parents=True)
+            (exefs / "code.bin").write_bytes(override)
+        return temp, root
+
+    def test_update_installed_without_korean_code_is_blocking(self):
+        from verify_install import _check_update_code
+
+        temp, root = self._user_dir(with_update=True, override=None)
+        with temp:
+            check = _check_update_code(root)
+        self.assertEqual(check.status, "X")
+        self.assertTrue(check.blocking)
+        self.assertIn("카드", check.detail)
+
+    def test_override_without_update_is_blocking(self):
+        from verify_install import _check_update_code
+
+        temp, root = self._user_dir(with_update=False, override=b"stray")
+        with temp:
+            check = _check_update_code(root)
+        self.assertEqual(check.status, "X")
+
+    def test_no_update_no_override_is_ok(self):
+        from verify_install import _check_update_code
+
+        temp, root = self._user_dir(with_update=False, override=None)
+        with temp:
+            check = _check_update_code(root)
+        self.assertEqual(check.status, "O")
+
+    def test_untranslated_card_db_in_override_is_reported(self):
+        from verify_install import UPDATE_CARD_DB, _check_update_code
+
+        start, length = UPDATE_CARD_DB
+        code = bytearray(b"\x20" * (start + length))
+        code[start:start + length] = (b"\x82\xa0" * (length // 2))[:length]
+        temp, root = self._user_dir(with_update=True, override=bytes(code))
+        with temp:
+            check = _check_update_code(root)
+        self.assertEqual(check.status, "X")
+        self.assertIn("0%", check.detail)
+
+
+class UpdateCodePatchTests(unittest.TestCase):
+    def test_ips_round_trip(self):
+        from apply_update_code import apply_ips_patch, make_ips_patch
+
+        source = bytes(range(256)) * 40
+        target = bytearray(source)
+        target[100:110] = b"KOREANTEXT"
+        target[9000:9004] = b"\xb0\xa1\xb0\xa1"
+        patch = make_ips_patch(source, bytes(target))
+        self.assertEqual(patch[:5], b"PATCH")
+        self.assertEqual(patch[-3:], b"EOF")
+        self.assertEqual(apply_ips_patch(source, patch), bytes(target))
+
+    def test_ips_rejects_length_change(self):
+        from apply_update_code import make_ips_patch
+
+        with self.assertRaises(ValueError):
+            make_ips_patch(b"abc", b"abcd")

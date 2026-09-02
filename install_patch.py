@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import sys
@@ -26,7 +27,11 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE_TID = "00040000000F5700"
+UPDATE_TID = "0004000e000f5700"
 DLC_TID = "0004008c000f5700"
+UPDATE_IPS = "update_code_ko.ips"
+# 게임 업데이트(ver 1.2) 실행코드를 BLZ 해제한 것의 해시. 이 IPS 는 이 코드에만 맞는다.
+UPDATE_CODE_SHA256 = "4b21f19242488e28b68dffdf29b65f8af32be2a58431a5031edaa8e8c74af6e1"
 CATALOG_NAME = "ContentInfoArchive_JPN_ja.bin"
 BASE_REL = Path("load") / "mods" / BASE_TID / "romfs" / "CULDCEPT.DAT"
 HERE = Path(__file__).resolve().parent
@@ -108,6 +113,75 @@ def clean_previous_install(az: Path, dry_run: bool = False) -> list[str]:
     return removed
 
 
+def find_installed_update(az: Path) -> Path | None:
+    """가상 SD 에 설치된 게임 업데이트(0004000e000f5700)의 .app 을 찾는다."""
+    sd = az / "sdmc" / "Nintendo 3DS"
+    if not sd.is_dir():
+        return None
+    for id0 in sd.iterdir():
+        if not id0.is_dir():
+            continue
+        for id1 in id0.iterdir():
+            content = id1 / "title" / "0004000e" / "000f5700" / "content"
+            if not content.is_dir():
+                continue
+            apps = sorted(p for p in content.rglob("*.app") if p.is_file())
+            if apps:
+                return max(apps, key=lambda p: p.stat().st_size)
+    return None
+
+
+def install_update_code(az: Path) -> str:
+    """업데이트 실행코드 안의 **카드 DB** 를 한글로 바꿔 ExeFS 오버라이드로 깐다.
+
+    v1.2 업데이트에는 RomFS 가 없고 `.code` 만 있는데, 그 안에 카드 이름·능력·설명이
+    통째로 들어 있다. 업데이트를 깔면 게임은 카드 텍스트를 CULDCEPT.DAT 이 아니라
+    이 실행코드에서 읽으므로, DAT 만 한글화하면 **카드만 원문으로 남는다**(이슈 #17).
+
+    업데이트가 없으면 오버라이드도 두지 않는다. 업데이트 없이 업데이트용 코드를
+    얹으면 실행 이미지가 어긋난다.
+    """
+    exefs = az / "load" / "mods" / BASE_TID / "exefs"
+    target = exefs / "code.bin"
+    app = find_installed_update(az)
+    if app is None:
+        if target.is_file():
+            target.unlink()
+            try:
+                exefs.rmdir()
+            except OSError:
+                pass
+            return "게임 업데이트가 없어 실행코드 오버라이드를 제거했습니다."
+        return "게임 업데이트: 설치되어 있지 않음 — 실행코드 패치 불필요"
+
+    ips_path = HERE / UPDATE_IPS
+    if not ips_path.is_file():
+        return f"게임 업데이트를 찾았지만 {UPDATE_IPS} 가 패키지에 없습니다 — 건너뜀"
+
+    try:
+        import apply_update_code as upd
+        code = upd.extract_code(app)
+    except Exception as exc:                     # noqa: BLE001 - 사용자에게 이유를 보여준다
+        return f"업데이트 실행코드를 읽지 못했습니다: {exc}"
+
+    digest = hashlib.sha256(code).hexdigest()
+    if digest != UPDATE_CODE_SHA256:
+        cont = chr(92)                       # 줄 이음 문자
+        hint = [
+            "설치된 게임 업데이트가 이 패치가 아는 판(ver 1.2)과 다릅니다.",
+            "     본인 파일로 직접 만들려면:",
+            "       python apply_update_code.py --dat 원본/CULDCEPT.DAT " + cont,
+            '           --update "%s" ' % app + cont,
+            '           --out "%s"' % target,
+        ]
+        return chr(10).join(hint)
+
+    patched = upd.apply_ips_patch(code, ips_path.read_bytes())
+    exefs.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(patched)
+    return f"업데이트 실행코드 카드 DB 한글화 → {target} ({len(patched):,}바이트)"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="컬드셉트 리볼트 한글패치 설치기")
     ap.add_argument("--azahar", help="Azahar 사용자 폴더 (미지정 시 자동 탐색)")
@@ -173,6 +247,9 @@ def main() -> int:
             print(f"DLC 오버레이 파일 {n}개 복사 (구버전 배치)")
         else:
             print("DLC 오버레이가 이 패키지에 없습니다 — 건너뜀")
+
+    # ── 게임 업데이트(ver 1.2) 실행코드 ─────────────────
+    print(install_update_code(az))
 
     # ── 본편 패치 확인 ──────────────────────────────────
     base = az / BASE_REL

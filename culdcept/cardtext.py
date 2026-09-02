@@ -27,11 +27,14 @@ def _jp_char_count(s):
         b = s[i]
         if 0x81 <= b <= 0xfc and i + 1 < n:
             try:
-                o = ord(s[i:i+2].decode("shift_jis"))
+                ch = s[i:i+2].decode("shift_jis")
+            except UnicodeDecodeError:
+                ch = ""
+            # 임의 바이트열에서는 2바이트가 두 글자로 풀리기도 한다(실행코드 스캔 등).
+            if len(ch) == 1:
+                o = ord(ch)
                 if (0x3040 <= o <= 0x30ff) or (0x4e00 <= o <= 0x9fff):
                     cnt += 1
-            except UnicodeDecodeError:
-                pass
             i += 2
         else:
             i += 1

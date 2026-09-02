@@ -11,6 +11,7 @@ code.bin
 # delta patch is a Release asset, not repo content
 *.bsdiff4
 *.xdelta
+*.ips
 # build / python
 __pycache__/
 *.pyc
