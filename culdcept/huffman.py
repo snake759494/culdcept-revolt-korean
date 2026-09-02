@@ -9,7 +9,11 @@ canonical-Huffman + LZ 방식으로, 게임의 ARM 디코더에서 리버스 엔
 
   decompress(entry_bytes) -> bytes           # 타입/크기 헤더를 포함한 엔트리 전체
   compress(data, typ=0x0c) -> bytes          # 무압축(전부 리터럴) 유효 엔트리
-  compress_real(data, typ=0x0c) -> bytes     # ★진짜 압축기(LZ77+캐노니컬 허프만)
+  compress_real(data, typ=0x0c, effort=2, budget=None) -> bytes
+                                             # ★진짜 압축기(LZ77+캐노니컬 허프만)
+                                             #   budget=원본 섹션 크기를 주면 그
+                                             #   안에 들어갈 때까지 effort를 3까지
+                                             #   자동으로 올린다.
 
 compress_real 은 원본 인코더와 같은(대개 더 좋은) 압축률을 낸다. .dlq 시나리오
 컨테이너는 섹션 사이 여유가 0바이트이고 파일 크기가 CRC 대상이라, 번역 후 다시
@@ -839,6 +843,9 @@ if __name__ == "__main__":
     samples += [bytes(random.choice(b'abcdefg ') for _ in range(5000))]
     for d in samples:
         for t in (0x08, 0x0c):
-            e = compress_real(d, t)
-            assert decompress(e) == d, (t, len(d))
+            for eff in (0, 1, 2, 3):
+                e = compress_real(d, t, eff)
+                assert decompress(e) == d, (t, eff, len(d))
+            e = compress_real(d, t, 2, budget=1)     # forces the escalation path
+            assert decompress(e) == d, (t, "budget", len(d))
     print("compress_real round-trip OK")
