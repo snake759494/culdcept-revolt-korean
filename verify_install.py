@@ -782,9 +782,59 @@ def _check_update_code(user_dir: Path) -> Check:
     return Check("게임 업데이트 실행코드", "!", f"알 수 없는 실행코드 ({len(data):,}바이트)")
 
 
+# ------------------------------------------------------- 배포본 정확 판별 ----
+# `KNOWN_BUILDS` 는 (파일크기, 가나수) 로만 보기 때문에 v2.0 이후를 전부 "현재 계열"
+# 하나로 묶어 버린다. 그래서 **여러 판을 건너뛰며 옛 DAT 을 그대로 쓰고 있어도**
+# 정상으로 보였다(이슈 #26). 설치 안내가 "본편 CULDCEPT.DAT 은 건드리지 않습니다"
+# 라고 적혀 있어, 릴리즈마다 xdelta 를 다시 적용해야 한다는 걸 놓치기 쉽다.
+# 그래서 SHA-256 으로 **어느 판인지 정확히** 찍어 준다.
+RELEASE_DAT_SHA = "b51c535dda74d72ca6ddaae7f69d5a834512fbd42be5c43f9c83d10903b8c19d"
+RELEASE_NAME = "v2.20"
+KNOWN_DAT_SHA = {
+    "82cedc2e6d91ef28b1cf776e7dd0219be5fcefe5b325a980c78dc1107edb8562": "v2.17",
+    "d457cd6a2a1cce0955347170d709571f1092805b6a1c52ce7a25976fd0af0f94": "v2.18",
+    "7dd7ddf16bc5558b4cfb3db85922c32a3af4fade810e5e79e20ca68d4aff16d4": "v2.19",
+    "2b9cf91f7381c8c810a1cf25f2530989d638374b18842ca5cff57ee92f89e334": "v1.4",
+    "752cb0a351f68985fdaf56d0f9b3d6771951113b342f617785f1525712ecfcb7": "v1.6",
+    "ac26c42f2980cbef959869b45307801688154bd018982f953784422eb79ec1e8": "v1.8",
+    "d75ac2b051433da15a9fe0eb26e22c64b594f9829094708eb3d6ddbd8bb2c54f": "v1.9",
+    "41f9339eb3989d7375848eca04fe79b22afb29a494e4999540e70e18459faa3c": "v2.0",
+    "6b10fbbdcba523bbc8a1b545f9452a3eac6ff85a9d459791f9049c4493c73c80": "v2.1",
+}
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 22), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _check_dat_version(user_dir: Path) -> Check:
+    """설치된 CULDCEPT.DAT 이 **이번 릴리즈로 만든 것인지** 해시로 확인한다."""
+    path = _find_path(user_dir, "load", "mods", BASE_TITLE_ID, "romfs", "CULDCEPT.DAT")
+    if path is None or not path.is_file():
+        return Check("본편 DAT 판본", "X",
+                     "본편 CULDCEPT.DAT 이 없습니다. README 1단계를 하세요.", True)
+    got = _sha256(path)
+    if got == RELEASE_DAT_SHA:
+        return Check("본편 DAT 판본", "O", f"{RELEASE_NAME} 로 만든 파일이 맞습니다.")
+    old = KNOWN_DAT_SHA.get(got)
+    which = f"{old} 로 만든 파일입니다" if old else "어느 판인지 알 수 없는 파일입니다"
+    return Check(
+        "본편 DAT 판본", "X",
+        f"{which} (현재 릴리즈 = {RELEASE_NAME}). "
+        f"★ 본편 텍스트·인물 이름·대사는 **거의 전부 이 파일 안에** 있습니다. "
+        f"설치.cmd 는 이 파일을 건드리지 않으므로, **릴리즈마다** 원본 CULDCEPT.DAT 에 "
+        f"culdcept-korean.xdelta 를 다시 적용해 이 자리에 덮어써야 합니다(README 1단계).",
+        True)
+
+
 def inspect_install(user_dir: Path) -> list[Check]:
     return [
         _check_base(user_dir),
+        _check_dat_version(user_dir),
         _check_card_db(user_dir),
         _check_update_code(user_dir),
         _check_catalog(user_dir),
