@@ -98,7 +98,14 @@ def main():
                 out += wansung.encode_char(text[i], syll2code); i += 1
         return bytes(out)
 
+    trunc_warnings = []
+    trunc_src = [""]
+
     def trunc(bs, limit):
+        # 잘리면 화면에서 글자가 사라진다. 조용히 넘어가면 번역을 고칠 때
+        # 무엇이 잘렸는지 알 수 없으므로 반드시 알린다.
+        if len(bs) > limit:
+            trunc_warnings.append((len(bs), limit, trunc_src[0], bytes(bs[:limit])))
         if len(bs) <= limit: return bs
         out = bytearray(); i = 0
         while i < len(bs):
@@ -106,6 +113,35 @@ def main():
             if len(out)+step > limit: break
             out += bs[i:i+step]; i += step
         return bytes(out)
+
+    def pad_page(enc, opage):
+        """페이지를 원본 바이트 길이에 맞추되, 공백을 **각 줄 끝에** 나눠 넣는다.
+
+        이 폰트는 고정폭이라 공백 하나가 글자 한 칸을 그대로 차지한다. 그래서
+        모자란 만큼을 페이지 **맨 뒤**에 붙이면, 그 공백들이 마지막 줄을 넘겨
+        대화창 밖으로 흘러 **아무 글자도 없는 빈 페이지**가 한 장 더 생긴다
+        (이슈 #24 "대사창 공백").
+
+        대신 각 줄을 **원본의 같은 줄 길이**까지만 채우면, 한글(2바이트)이
+        원문 한자·가나(2바이트)와 폭이 같고 공백(1바이트)은 그보다 좁으므로
+        어떤 줄도 원본보다 넓어질 수 없다 = 줄이 절대 넘치지 않는다.
+        """
+        need = len(opage) - len(enc)
+        if need <= 0:
+            return enc
+        # 0x0a 는 SJIS 2바이트 문자의 뒷바이트(0x40~0xfc)로 나올 수 없어 안전하다.
+        klines = bytearray(enc).split(bytes([10]))
+        olines = opage.split(bytes([10]))
+        out = []
+        for i, kl in enumerate(klines):
+            room = len(olines[i]) - len(kl) if i < len(olines) else 0
+            take = max(0, min(room, need))
+            out.append(bytes(kl) + bytes([PAD]) * take)
+            need -= take
+        res = bytes([10]).join(out)
+        if need > 0:                       # 줄 수가 달라 자리가 남으면 뒤에 붙인다
+            res += bytes([PAD]) * need
+        return res if len(res) == len(opage) else enc + bytes([PAD]) * (len(opage) - len(enc))
 
     def pad_fill(view, tokens, syll2code, enc, target):
         """번역 결과를 원문 바이트 길이에 맞춰 **공백(0x20)** 으로 채운다.
@@ -153,7 +189,7 @@ def main():
         enc = cardtext.encode("".join(s), tokens, syll2code)
         return enc if len(enc) <= budget else trunc(enc, budget)
 
-    def apply_missed(dec, mm):
+    def apply_missed(dec, mm, label=""):
         """find_text_region 이 놓친 중간 텍스트 세그먼트를 오프셋 기준 제자리 교체.
         각 세그먼트를 페이지(0x07) 단위로 원문 바이트 길이 이하 교체(0x20 패딩)해
         모든 페이지 오프셋을 보존한다. mm = {offset(str): [korean_page, ...]}."""
@@ -171,8 +207,9 @@ def main():
             for pi, opage in enumerate(opages):
                 if pi < len(pages) and pages[pi] != "":
                     _, tokens = cardtext.tokenize(opage)
+                    trunc_src[0] = "missed_ko %s o%s.p%d" % (label, off_str, pi)
                     enc = fit_page(pages[pi], tokens, len(opage))
-                    newseg += enc + bytes([PAD]) * (len(opage) - len(enc))
+                    newseg += pad_page(enc, opage)
                 else:
                     newseg += opage
                 if pi < len(opages) - 1:
@@ -236,6 +273,7 @@ def main():
                     continue
                 bud = end - so
                 _, tokens = cardtext.tokenize(bytes(ent[so:end]))
+                trunc_src[0] = "%d.r%d o%s" % (idx, k, off_s)
                 enc = fit_page(pages[0], tokens, bud)
                 # 공백(0x20)으로 채운다 — 널을 채우면 빈 세그먼트가 생겨
                 # [제목][설명][노드명…] 순서로 읽는 퀘스트 데이터가 밀린다(이슈 #3).
@@ -253,7 +291,7 @@ def main():
             mm = missed_ko.get(f"{idx}.s{k}", {})
             if ts is None and not mm:
                 continue
-            dec = apply_missed(dec, mm)                       # 놓친 중간 세그먼트 제자리 교체(끝 영역 유무 무관)
+            dec = apply_missed(dec, mm, f"{idx}.s{k}")        # 놓친 중간 세그먼트 제자리 교체(끝 영역 유무 무관)
             new_dec = dec                                     # 기본값: missed 만 반영
             if ts is not None:
                 evmap = ko.get(f"e{idx}_s{k}", {})
@@ -265,8 +303,9 @@ def main():
                         if kp is not None and pi < len(kp) and kp[pi] != "":
                             enc = encp(kp[pi])
                             if len(enc) > len(opage):
+                                trunc_src[0] = "e%d_s%d.e%d.p%d" % (idx, k, ei, pi)
                                 enc = trunc(enc, len(opage))
-                            region += enc + bytes([PAD]) * (len(opage) - len(enc))
+                            region += pad_page(enc, opage)
                         else:
                             region += opage
                         if pi < len(opages) - 1:
@@ -286,6 +325,9 @@ def main():
     ui = bytearray(huffman.decompress(d.entry(UI_ENTRY)))
     # 카드 텍스트: 본인 파일에서 문자열을 열거·중복제거한 순서(=인덱스)로 제자리 교체
     n_card = 0
+    _secs = scen.parse_sections(bytes(ui)) or []
+    s3_lo, s3_hi = (_secs[3][0], _secs[3][0] + _secs[3][1]) if len(_secs) > 3 else (0, 0)
+
     if cards_ko:
         uniq = cardtext.enum_unique(ui)
         for idx, (raw, offs) in enumerate(uniq.items()):
@@ -295,6 +337,7 @@ def main():
             _, tokens = cardtext.tokenize(raw)
             enc = cardtext.encode(view, tokens, syll2code)
             if len(enc) > len(raw):
+                trunc_src[0] = "cards_ko[%d] %r" % (idx, view[:28])
                 enc = trunc(enc, len(raw))
             # 남는 자리는 **공백(0x20)** 으로 채운다 — 널(0x00)이 아니다.
             # 널로 채우면 문자열이 일찍 끝나 **빈 세그먼트가 새로 생긴다**. 게임은
@@ -306,8 +349,17 @@ def main():
             # 렌더돼 예/아니오 버튼을 밀어낸다(이슈 #1). 그래서 pad_fill() 이
             # **제어코드 앞쪽에** 채워 넣는다.
             body = pad_fill(view, tokens, syll2code, enc, len(raw))
+            # UI 섹션(s3)의 **토큰·줄바꿈 없는 짧은 라벨**은 널로 채운다.
+            # 이런 라벨은 다른 문장 안에 그대로 끼워 넣어지므로("맵이나 <셉터> 등"),
+            # 뒤에 붙은 공백이 고정폭 폰트에서 글자 칸만큼 벌어져 보인다(이슈 #24).
+            # s3 은 오프셋 참조라 널을 넣어도 안전하다 — UI_KO 가 이미 같은 방식으로
+            # "マップ"->"맵" 등을 넣고 있고 화면에서 정상 동작한다(같은 줄의 "맵"은
+            # 벌어지지 않고 "셉터"만 벌어진 것이 그 증거).
+            body_nul = enc + b"\x00" * (len(raw) - len(enc))
+            plain = not tokens and bytes([10]) not in raw
             for off in offs:
-                ui[off:off+len(raw)] = body
+                inline = plain and s3_lo <= off < s3_hi
+                ui[off:off+len(raw)] = body_nul if inline else body
                 n_card += 1
 
     # enum_unique 필터가 놓친 문자열(오프셋 기준). cards_extra_ko.json 참고.
@@ -329,6 +381,7 @@ def main():
         _, tokens = cardtext.tokenize(raw)
         enc = cardtext.encode(spec["ko"], tokens, syll2code)
         if len(enc) > len(raw):
+            trunc_src[0] = "cards_extra[%s]" % off_s
             enc = trunc(enc, len(raw))
         ui[off:off+len(raw)] = pad_fill(spec["ko"], tokens, syll2code, enc, len(raw))
         n_extra += 1
@@ -375,7 +428,7 @@ def main():
         mm = missed_ko.get(str(idx), {})
         if ts is None and not mm:
             continue
-        dec = apply_missed(dec, mm)   # 놓친 중간 세그먼트(예: 1849 튜토리얼)
+        dec = apply_missed(dec, mm, str(idx))   # 놓친 중간 세그먼트(예: 1849 튜토리얼)
         if ts is None:                # 끝 영역 없는 블롭: missed 만 반영
             if dec != huffman.decompress(ent):
                 new_sec = huffman.compress(dec, typ=ent[0])
@@ -389,8 +442,9 @@ def main():
             for pi, opage in enumerate(opages):
                 if kp is not None and pi < len(kp) and kp[pi] != "":
                     _, tokens = cardtext.tokenize(opage)
+                    trunc_src[0] = "block e%d.e%d.p%d" % (idx, ei, pi)
                     enc = fit_page(kp[pi], tokens, len(opage))
-                    region += enc + bytes([PAD]) * (len(opage) - len(enc))
+                    region += pad_page(enc, opage)
                 else:
                     region += opage
                 if pi < len(opages) - 1:
@@ -405,6 +459,13 @@ def main():
         assert huffman.decompress(new_sec) == new_dec
         d.replace_entry(idx, new_sec)
 
+    if trunc_warnings:
+        worst = max(w - l for w, l, _, _ in trunc_warnings)
+        print("  ! 길이 초과로 잘린 문자열 %d개 (최대 %d바이트 초과)"
+              % (len(trunc_warnings), worst))
+        # 무엇이 잘렸는지 모르면 고칠 수 없다. 어디서 몇 바이트 넘쳤는지 함께 남긴다.
+        for w, l, src, cut in trunc_warnings[:40]:
+            print("      +%d  %s" % (w - l, src))
     d.replace_entry(FONT_ENTRY, new_font)
     d.replace_entry(UI_ENTRY, new_ui)
     open(args.outfile, "wb").write(d.build())

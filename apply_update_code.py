@@ -212,6 +212,41 @@ def apply_ips_patch(source: bytes, patch: bytes) -> bytes:
     return bytes(out)
 
 
+def patch_ui(code: bytes, ui_ko: dict, syll2code: dict) -> tuple[bytes, int]:
+    """카드 DB **밖**(메뉴·통신 안내문)의 문자열을 원문 SHA-1 로 찾아 제자리 교체.
+
+    v1.2 업데이트 실행코드에는 본편 CULDCEPT.DAT 에 없는 문자열이 들어 있다.
+    "로컬 통신을 사용해 근처 친구와 대전합니다" 안내문이 그래서 원문 그대로
+    남아 있었다(이슈 #24). 카드 DB 영역만 훑는 patch() 로는 닿지 않는다.
+
+    남는 자리는 **널**로 채운다. 실행코드의 문자열은 포인터로 참조되므로 널을
+    넣어도 뒤가 밀리지 않고, 공백으로 채우면 고정폭 폰트에서 그 공백이 글자
+    칸만큼 벌어져 보인다.
+    """
+    if not ui_ko:
+        return code, 0
+    out = bytearray(code)
+    n = 0
+    cursor = 0
+    for i, b in enumerate(code):
+        if b:
+            continue
+        raw = bytes(code[cursor:i])
+        cursor = i + 1
+        if len(raw) < 4 or not any(x >= 0x81 for x in raw):
+            continue
+        view = ui_ko.get(hashlib.sha1(raw).hexdigest())
+        if view is None:
+            continue
+        _, tokens = cardtext.tokenize(raw)
+        enc = cardtext.encode(view, tokens, syll2code)
+        if len(enc) > len(raw):                     # 안 들어가면 건드리지 않는다
+            continue
+        out[i - len(raw):i] = enc + bytes(len(raw) - len(enc))
+        n += 1
+    return bytes(out), n
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="업데이트 실행코드의 카드 DB 한글화")
     ap.add_argument("--dat", required=True, help="본인의 **원본** CULDCEPT.DAT")
@@ -220,6 +255,7 @@ def main() -> int:
     ap.add_argument("--ips", help="원본 실행코드 -> 한글 실행코드 IPS 패치도 함께 저장")
     ap.add_argument("--cards", default="cards_ko.json")
     ap.add_argument("--extra", default="update_extra_ko.json")
+    ap.add_argument("--ui", default="update_ui_ko.json")
     args = ap.parse_args()
 
     here = Path(__file__).resolve().parent
@@ -243,7 +279,15 @@ def main() -> int:
         return 1
     print(f"카드 DB 위치 0x{start:x} ~ 0x{start + S0_LENGTH:x}")
 
+    ui_path = Path(args.ui)
+    if not ui_path.is_absolute():
+        ui_path = here / ui_path
+    ui_ko = json.loads(ui_path.read_text(encoding="utf-8")) if ui_path.is_file() else {}
+    ui_ko = {k: v for k, v in ui_ko.items() if not k.startswith("_")}
+
     patched, stats = patch(code, start, raw2ko, extra, syll2code)
+    patched, n_ui = patch_ui(patched, ui_ko, syll2code)
+    print(f"메뉴·통신 안내문 {n_ui}/{len(ui_ko)}개 교체")
     if len(patched) != len(code):
         print("길이가 달라졌습니다 — 중단합니다.")
         return 1

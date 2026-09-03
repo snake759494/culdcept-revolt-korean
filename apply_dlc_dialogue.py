@@ -27,8 +27,8 @@ import struct
 import sys
 from pathlib import Path
 
-from apply_dlc_text import RESOURCE_EXT, encode, make_ips, romfs_files, syllable_map
-from culdcept import dlcres, huffman, scen
+from apply_dlc_text import RESOURCE_EXT, make_ips, romfs_files, syllable_map
+from culdcept import dlcres, dlctext, huffman, scen
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -38,65 +38,71 @@ PAGE, EVENT, PAD = 0x07, 0x00, 0x20
 PAGE_MARK = "▼"
 
 
-def rebuild_events(section, text_start, edits, syll2code, report, label):
-    """번역한 이벤트만 페이지 길이를 지켜 교체하고, 나머지는 원본을 그대로 둔다."""
-    region = section[text_start:]
-    events = region.split(bytes([EVENT]))
-    # 마지막 조각이 비어 있으면 영역이 NUL 로 끝난다는 뜻이다 — 이벤트마다 NUL 하나씩.
-    # 비어 있지 않으면 마지막 이벤트에는 종료 NUL 이 없다.
-    ends_with_nul = bool(events) and events[-1] == b""
-    if ends_with_nul:
-        events = events[:-1]
-    out = bytearray(section[:text_start])
+def pad_page(enc, opage):
+    """페이지를 원본 길이에 맞추되 공백을 **각 줄 끝에** 나눠 넣는다.
 
-    def terminator(index):
-        last = index == len(events) - 1
-        return b"" if (last and not ends_with_nul) else bytes([EVENT])
+    이 폰트는 고정폭이라 공백 하나가 글자 한 칸을 그대로 차지한다. 모자란 만큼을
+    페이지 맨 뒤에 몰아 붙이면 그 공백이 마지막 줄을 넘겨 대화창 밖으로 흘러
+    **빈 페이지가 한 장 더** 생긴다(본편에서 확인된 이슈 #24 "대사창 공백").
+    각 줄을 원본의 같은 줄 길이까지만 채우면 어떤 줄도 원본보다 넓어지지 않는다.
+    """
+    need = len(opage) - len(enc)
+    if need <= 0:
+        return enc
+    klines = bytes(enc).split(bytes([0x0A]))
+    olines = opage.split(bytes([0x0A]))
+    out = []
+    for i, kl in enumerate(klines):
+        room = len(olines[i]) - len(kl) if i < len(olines) else 0
+        take = max(0, min(room, need))
+        out.append(bytes(kl) + bytes([PAD]) * take)
+        need -= take
+    res = bytes([0x0A]).join(out)
+    if need > 0:
+        res += bytes([PAD]) * need
+    return res if len(res) == len(opage) else enc + bytes([PAD]) * (len(opage) - len(enc))
 
-    for index, original in enumerate(events):
-        view = edits.get(index)
+
+def rebuild_section(section, edits, syll2code, report, label):
+    """번역할 문자열을 **페이지 길이를 보존한 채** 제자리 교체한다.
+
+    게임은 페이지(0x07)와 문자열 끝(0x00)의 바이트 위치를 그대로 참조하므로,
+    각 페이지를 원본 페이지의 바이트 길이에 맞춰 공백으로 채운다. 마지막 페이지의
+    남는 자리도 공백이라 화면에는 보이지 않는다.
+    """
+    out = bytearray(section)
+    for offset, original, _view in dlctext.enum_section_text(section):
+        view = edits.get(offset)
         if view is None:
-            out += original + terminator(index)
             continue
         opages = original.split(bytes([PAGE]))
-        kpages = view.split(PAGE_MARK)
+        kpages = view.split(dlctext.PAGE_MARK)
+        # 모르는 제어코드는 ⟦k⟧ 토큰으로 보존된다. 번호는 문자열 전체 기준이므로
+        # 페이지별로 다시 매기지 말고 원문 전체에서 한 번만 뽑아 그대로 넘긴다.
+        _view, _jp, tokens = dlctext._decode(original)
+        if tokens is None:
+            tokens = ()
         if len(opages) != len(kpages):
-            report.append("  ! %s 이벤트 %d 페이지 수 불일치(%d != %d) — 원본 유지"
-                          % (label, index, len(kpages), len(opages)))
-            out += original + terminator(index)
+            report.append("  ! %s 0x%x 페이지 수 불일치(%d != %d) — 원본 유지"
+                          % (label, offset, len(kpages), len(opages)))
             continue
         rebuilt = bytearray()
         too_long = False
-        for page_index, opage in enumerate(opages):
-            enc = encode(kpages[page_index], syll2code)
+        for index, opage in enumerate(opages):
+            enc = dlctext.encode(kpages[index], syll2code, tokens)
             if len(enc) > len(opage):
                 too_long = True
                 break
-            rebuilt += enc + bytes([PAD]) * (len(opage) - len(enc))
-            if page_index < len(opages) - 1:
+            rebuilt += pad_page(enc, opage)
+            if index < len(opages) - 1:
                 rebuilt += bytes([PAGE])
         if too_long:
-            report.append("  ! %s 이벤트 %d 번역이 원본 페이지보다 길어 원본 유지" % (label, index))
-            out += original + terminator(index)
+            report.append("  ! %s 0x%x 번역이 원본 페이지보다 길어 원본 유지" % (label, offset))
             continue
-        out += rebuilt + terminator(index)
-    if len(out) != len(section):
-        raise ValueError("섹션 길이 보존 실패: %d != %d" % (len(out), len(section)))
-    return bytes(out)
-
-
-def rebuild_offsets(section, edits, syll2code, report, label):
-    """오프셋으로 지정된 널 종료 문자열을 제자리 교체(공백 패딩)."""
-    out = bytearray(section)
-    for offset, view in edits.items():
-        end = out.index(0, offset)
-        room = end - offset
-        enc = encode(view, syll2code)
-        if len(enc) > room:
-            report.append("  ! %s 0x%x 번역이 %d바이트로 자리(%d)를 넘어 건너뜀"
-                          % (label, offset, len(enc), room))
+        if len(rebuilt) != len(original):
+            report.append("  ! %s 0x%x 길이 보존 실패 — 원본 유지" % (label, offset))
             continue
-        out[offset:end] = enc + bytes([PAD]) * (room - len(enc))
+        out[offset:offset + len(original)] = rebuilt
     return bytes(out)
 
 
@@ -134,17 +140,11 @@ def patch_resource(raw, name, texts, syll2code, report):
 
         section = huffman.decompress(blob)
         label = "%s s%d" % (name, index)
-        events = {int(k[1:]): v for k, v in mine.items() if k.startswith("e")}
-        offsets = {int(k[1:]): v for k, v in mine.items() if k.startswith("o")}
-        if events:
-            text_start, _ = scen.find_text_region(section)
-            if text_start is None:
-                report.append("  ! %s 텍스트 영역을 찾지 못해 건너뜀" % label)
-                blobs.append(blob)
-                continue
-            section = rebuild_events(section, text_start, events, syll2code, report, label)
-        if offsets:
-            section = rebuild_offsets(section, offsets, syll2code, report, label)
+        edits = {int(k[1:]): v for k, v in mine.items() if k.startswith("o")}
+        if not edits:
+            blobs.append(blob)
+            continue
+        section = rebuild_section(section, edits, syll2code, report, label)
 
         packed = huffman.compress_real(section, blob[0], effort=3)
         if huffman.decompress(packed) != section:
