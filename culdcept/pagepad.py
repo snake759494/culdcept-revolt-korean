@@ -175,6 +175,35 @@ SENT_END = ("。", "．", ".", "!", "?", "！", "？", "…",
 OPEN_MARK = ("「", "『", "（", "(")
 
 
+# 줄 끝에 오면 어색한 낱말 — 뒤 낱말과 한 덩어리로 읽힌다.
+# ("살 수 있는 건 카드가 봉인된 / 돌이야" 처럼 갈라지면 읽기 나쁘다)
+DANGLING = frozenset((
+    "못", "안", "좀", "더", "덜", "잘", "또", "곷", "막",
+    "참", "꿘", "아주", "매우", "너무", "가장", "제일",
+    "그", "이", "저", "한", "두", "세", "몇", "무슠", "어떤",
+    "모든", "온갖", "각", "새", "옛", "수", "줄", "리", "채",
+    "만큼", "내", "번", "온",
+))
+# 관형형 어미 — 뒤에 꾸밈을 받을 말이 반드시 온다.
+DANGLING_TAIL = ("는", "던", "할", "될", "인는")
+
+
+def _dangles(word: bytes, to_text) -> bool:
+    """이 낱말로 줄을 끝내면 뒤 낱말과 갈라져 읽기 나쁜가.
+
+    한글은 JIS 제1수준 한자 슬롯을 빌려 쓰므로 cp932 로 풀면 한자가 나온다.
+    그래서 **폰트 역매핑을 넘겨받아** 읽을 수 있는 한글로 바꿔 판단한다.
+    """
+    text = to_text(word) if to_text else ""
+    if not text:
+        return False
+    if text in DANGLING:
+        return True
+    if len(text) >= 2 and text.endswith("의"):     # -의 (소유격)
+        return True
+    return len(text) >= 2 and text.endswith(DANGLING_TAIL)
+
+
 def _ends_sentence(word: bytes) -> bool:
     """줄을 여기서 끊어도 자연스러운가 — 문장부호로 끝나면 그렇다."""
     try:
@@ -192,7 +221,7 @@ def _opens(word: bytes) -> bool:
     return bool(text) and text[-1] in "".join(OPEN_MARK)
 
 
-def _best_lines(parts, box, rows, orig_breaks):
+def _best_lines(parts, box, rows, orig_breaks, to_text=None):
     """줄바꿈 자리를 **가장 좋게** 고른다(작은 DP).
 
     좋다는 기준은 세 가지다.
@@ -224,6 +253,7 @@ def _best_lines(parts, box, rows, orig_breaks):
                     cost += (box - width) ** 2
                     cost += 0 if _ends_sentence(parts[j - 1]) else 90
                     cost += 150 if _opens(parts[j - 1]) else 0
+                    cost += 200 if _dangles(parts[j - 1], to_text) else 0
                     cost -= 120 if j in orig_breaks else 0
                 if cost < best[0]:
                     best = (cost, i)
@@ -245,7 +275,7 @@ def _join(lines) -> bytes:
     return bytes([NEWLINE]).join(b" ".join(l) for l in lines)
 
 
-def rewrap(page: bytes, budget: int, box: int = BOX, rows: int = ROWS):
+def rewrap(page: bytes, budget: int, box: int = BOX, rows: int = ROWS, to_text=None):
     """**낱말은 그대로 두고 줄바꿈만 다시 잡아** 대화창 안에 넣어 본다.
 
     20칸을 넘는 줄은 게임이 알아서 나누므로, 두 줄짜리 21칸+21칸 페이지는 화면에서
@@ -264,7 +294,7 @@ def rewrap(page: bytes, budget: int, box: int = BOX, rows: int = ROWS):
         parts += line
         seen += len(line)
         breaks.add(seen)                                # 원래 줄이 끝나던 자리
-    candidates = _best_lines(parts, box, rows, breaks)
+    candidates = _best_lines(parts, box, rows, breaks, to_text)
     if not candidates:
         return None
     # ★ 채움까지 넣고 판정해야 한다. 두 줄 19칸+19칸은 그 자체로는 두 줄이지만,

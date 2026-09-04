@@ -196,6 +196,21 @@ def main():
             out += bs[i:i+step]; i += step
         return bytes(out)
 
+    code2syll = {v: k for k, v in syll2code.items()}
+
+    def to_text(word):
+        """게임 바이트 낱말을 **읽을 수 있는 한글**로. 줄바꿈 규칙 판단에 쓴다."""
+        out, i = [], 0
+        while i < len(word):
+            step = pagepad._step(word, i)
+            if step == 2 and 0x81 <= word[i] <= 0xFC:
+                ch = code2syll.get((word[i] << 8) | word[i + 1])
+                out.append(ch if ch else word[i:i + 2].decode("cp932", "replace"))
+            elif word[i] >= 0x20:
+                out.append(chr(word[i]) if word[i] < 0x80 else "?")
+            i += step
+        return "".join(out)
+
     def pad_page(enc, opage):
         """페이지를 원본 바이트 길이에 맞춘다 — 채움은 **전각 공백**.
 
@@ -214,7 +229,7 @@ def main():
         # 19칸+19칸 페이지는 채움을 넣으면 21칸+21칸=네 줄이 되는데, 같은 낱말을
         # 세 줄로 나눠 두면 세 줄에 머문다(글자는 하나도 안 바뀐다).
         if pagepad.visual_lines(out) > pagepad.ROWS:
-            again = pagepad.rewrap(enc, len(opage))
+            again = pagepad.rewrap(enc, len(opage), to_text=to_text)
             if again is not None:
                 enc = again
                 out = pagepad.pad_page(again, opage)
