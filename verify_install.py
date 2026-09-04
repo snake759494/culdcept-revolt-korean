@@ -788,8 +788,8 @@ def _check_update_code(user_dir: Path) -> Check:
 # 정상으로 보였다(이슈 #26). 설치 안내가 "본편 CULDCEPT.DAT 은 건드리지 않습니다"
 # 라고 적혀 있어, 릴리즈마다 xdelta 를 다시 적용해야 한다는 걸 놓치기 쉽다.
 # 그래서 SHA-256 으로 **어느 판인지 정확히** 찍어 준다.
-RELEASE_DAT_SHA = "dc9f7457d04011b659efb7af5dae7b38adf43fb336762348fe61bdc3d1e3ec2f"
-RELEASE_NAME = "v2.22"
+RELEASE_DAT_SHA = "0c6aeb5c4836382dc4e83832bdb042a784cdf35ea298f676651018ad4c515179"
+RELEASE_NAME = "v2.23"
 KNOWN_DAT_SHA = {
     "82cedc2e6d91ef28b1cf776e7dd0219be5fcefe5b325a980c78dc1107edb8562": "v2.17",
     "d457cd6a2a1cce0955347170d709571f1092805b6a1c52ce7a25976fd0af0f94": "v2.18",
@@ -801,6 +801,7 @@ KNOWN_DAT_SHA = {
     "41f9339eb3989d7375848eca04fe79b22afb29a494e4999540e70e18459faa3c": "v2.0",
     "6b10fbbdcba523bbc8a1b545f9452a3eac6ff85a9d459791f9049c4493c73c80": "v2.1",
     "b51c535dda74d72ca6ddaae7f69d5a834512fbd42be5c43f9c83d10903b8c19d": "v2.20/v2.21",
+    "dc9f7457d04011b659efb7af5dae7b38adf43fb336762348fe61bdc3d1e3ec2f": "v2.22",
 }
 
 
