@@ -24,6 +24,7 @@ dialogue_ko.json / cards_ko.json 은 한국어 번역만 담습니다(일본어 
 import argparse
 import json
 import os
+import re
 import struct
 import sys
 
@@ -35,6 +36,7 @@ from opening_ko import UI_KO, SETUP_KO
 FONT_ENTRY, UI_ENTRY = 1054, 1190
 CONTAINERS = list(range(1946, 1959))
 PAD = 0x20
+FILL = b"\x08@"        # 폭 0인 채움 — 강조 끄기 제어코드(원본도 문자열 끝에 쓴다)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_FONTS = [
     os.path.join(_HERE, "fonts", "NanumSquareNeo-cBd.ttf"),
@@ -95,6 +97,35 @@ def shrink_container(container, budget):
             container = scen.rebuild_container(container, k - 1, cand)
     return container
 
+
+
+_ENGLISH_NAME = re.compile(rb"[A-Za-z][A-Za-z0-9 .&!'/():+,\-\n]*\Z")
+
+
+def card_name_offsets(ui: bytes) -> set:
+    """엔트리 1190 에서 **카드 표시 이름** 필드의 오프셋을 모은다.
+
+    레코드는 널로 구분된 필드가 이 순서로 이어진다.
+        [표시 이름] [능력] [영문 이름] [플레이버] [용어] [전략]
+    영문 이름(ASCII 만)을 기준으로 두 칸 앞이 표시 이름이다(verify_cards.py 와 같은
+    방법). 표시 이름만 다른 문장에 끼워 넣어지므로, 남는 자리를 폭 0 제어코드로
+    채워야 하는 것도 이 필드뿐이다.
+    """
+    segments, offsets, start = [], [], 0
+    for i, b in enumerate(ui):
+        if b == 0:
+            segments.append(bytes(ui[start:i]))
+            offsets.append(start)
+            start = i + 1
+    names = set()
+    for i in range(2, len(segments) - 3):
+        raw = segments[i]
+        if not (1 <= len(raw) <= 48 and _ENGLISH_NAME.fullmatch(raw)):
+            continue
+        if not any(0x41 <= v <= 0x5A or 0x61 <= v <= 0x7A for v in raw):
+            continue
+        names.add(offsets[i - 2])
+    return names
 
 def pack(data, typ, budget=None):
     """엔트리/섹션을 **가장 작게** 다시 압축한다.
@@ -235,36 +266,39 @@ def main():
                                "본문": enc.decode("cp932", "replace")})
         return out
 
-    def pad_fill(view, tokens, syll2code, enc, target):
-        """번역 결과를 원문 바이트 길이에 맞춰 **공백(0x20)** 으로 채운다.
+    def pad_fill(view, tokens, syll2code, enc, target, is_name=False):
+        """번역 결과를 원문 바이트 길이에 맞춰 **폭 0인 제어코드**로 채운다.
 
-        널이 아니라 공백을 쓰는 이유: 게임은 카드 레코드의 필드를 널로 구분된
-        순서대로 읽으므로, 널을 더 넣으면 빈 세그먼트가 생겨 뒤 필드가 밀린다.
+        널로 채우면 안 된다: 게임은 카드 레코드의 필드(이름·능력치·영문명·플레이버)를
+        널로 구분해 **세면서** 읽으므로, 널이 하나 늘면 빈 필드가 생겨 뒤 필드가 전부
+        밀린다(이슈 #3). 원본의 널 개수를 그대로 유지해야 한다.
 
-        채우는 위치가 중요하다. 문자열이 제어코드로 끝나는데 공백을 맨 뒤에 붙이면,
-        예/아니오 버튼을 화면 밖으로 밀어낸다. 그래서 뒤쪽 12자 안에 줄바꿈이나
-        토큰이 있으면 **그 앞에** 채워 넣는다(눈에 보이지 않는 자리).
+        그렇다고 공백으로 채우면 이 폰트는 고정폭이라 **공백 하나가 글자 한 칸을
+        그대로 차지한다**. 카드 이름은 다른 문장에 끼워 넣어지므로 그 공백이 그대로
+        폭이 된다. 비술 배너의 "ロア의파이어드레이크"가 뒤 공백 4칸까지 14칸이 되어
+        배너를 넘겼고, 그 바람에 "ＳＴ30→50" 줄이 화면 밖으로 밀려 **빈 줄**로
+        보였다(이슈 #28). 채움이 0칸인 카드(키메라)만 정상으로 보이던 이유다.
+
+        0x08 + 인자는 강조를 켜고 끄는 제어코드로 **폭이 0**이다(`0x08 O 글자 @`).
+        원본도 문자열 끝에 `@`(강조 끄기)를 그대로 둔 곳이 e1190 에 10군데 있다.
+        홀수로 한 바이트가 남을 때만 공백 하나를 쓴다.
         """
         need = target - len(enc)
         if need <= 0:
             return enc
-        cut = None
-        # 뒤쪽 12자 안의 **줄바꿈**만 대상으로 하고, 그마저도 뒤에 실제 글자가
-        # 없을 때만 그 앞에 채운다. 토큰까지 대상으로 삼으면 '강타[   (아이콘)]'
-        # 처럼 괄호 안에 공백이 끼어 보기 나쁘다.
-        for i in range(max(0, len(view) - 12), len(view)):
-            if view[i] == chr(10):
-                tail = view[i:]
-                if not any("가" <= c <= "힣" for c in tail):
-                    cut = i
-                    break
-        if cut is None:                    # 평범한 문장 → 그냥 뒤에 채움
+        # 폭 0 채움은 압축이 잘 안 된다(같은 바이트가 이어지는 공백과 달리 두 바이트가
+        # 번갈아 나온다). 전부 이걸로 채우면 엔트리 1190 이 327바이트 커져 원래 자리에
+        # 못 들어가고, 그러면 게임이 옛 자리를 읽는 일이 생긴다(이슈 #27/#28).
+        # 그래서 **다른 문장에 끼워 넣어지는 짧은 이름**에만 쓴다. 긴 설명문은 자기
+        # 패널에서 알아서 줄이 바뀌므로 뒤 공백이 보이지 않는다.
+        if not (is_name and not tokens):
             return enc + bytes([PAD]) * need
-        padded = view[:cut] + " " * need + view[cut:]
-        out = cardtext.encode(padded, tokens, syll2code)
-        if len(out) == target:
-            return out
-        return enc + bytes([PAD]) * need      # 길이가 안 맞으면 안전하게 원래 방식
+        out = bytearray(enc)
+        if need % 2:                       # 홀수 한 바이트는 공백으로
+            out += bytes([PAD])
+            need -= 1
+        out += FILL * (need // 2)
+        return bytes(out)
 
     def fit_page(view, tokens, budget):
         """예산 초과 시: 끝쪽 공백부터 제거 → 그래도 넘으면 안전 절단(문자경계 보존)."""
@@ -421,6 +455,7 @@ def main():
     _secs = scen.parse_sections(bytes(ui)) or []
     s3_lo, s3_hi = (_secs[3][0], _secs[3][0] + _secs[3][1]) if len(_secs) > 3 else (0, 0)
 
+    name_offs = card_name_offsets(bytes(ui))
     if cards_ko:
         uniq = cardtext.enum_unique(ui)
         for idx, (raw, offs) in enumerate(uniq.items()):
@@ -442,6 +477,7 @@ def main():
             # 렌더돼 예/아니오 버튼을 밀어낸다(이슈 #1). 그래서 pad_fill() 이
             # **제어코드 앞쪽에** 채워 넣는다.
             body = pad_fill(view, tokens, syll2code, enc, len(raw))
+            body_name = pad_fill(view, tokens, syll2code, enc, len(raw), is_name=True)
             # UI 섹션(s3)의 **토큰·줄바꿈 없는 짧은 라벨**은 널로 채운다.
             # 이런 라벨은 다른 문장 안에 그대로 끼워 넣어지므로("맵이나 <셉터> 등"),
             # 뒤에 붙은 공백이 고정폭 폰트에서 글자 칸만큼 벌어져 보인다(이슈 #24).
@@ -452,7 +488,10 @@ def main():
             plain = not tokens and bytes([10]) not in raw
             for off in offs:
                 inline = plain and s3_lo <= off < s3_hi
-                ui[off:off+len(raw)] = body_nul if inline else body
+                if inline:
+                    ui[off:off + len(raw)] = body_nul
+                else:
+                    ui[off:off + len(raw)] = body_name if off in name_offs else body
                 n_card += 1
 
     # enum_unique 필터가 놓친 문자열(오프셋 기준). cards_extra_ko.json 참고.
