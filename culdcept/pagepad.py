@@ -108,13 +108,20 @@ def _upgrade_spaces(page: bytes, need: int):
     return bytes(out), used
 
 
-def pad_page(enc: bytes, opage: bytes) -> bytes:
-    """`enc` 를 `opage` 와 같은 바이트 길이로 만든다(넘치면 그대로 돌려준다)."""
+def pad_page(enc: bytes, opage: bytes, upgrade: bool = False) -> bytes:
+    """`enc` 를 `opage` 와 같은 바이트 길이로 만든다(넘치면 그대로 돌려준다).
+
+    `upgrade` 를 켜면 낱말 사이 반각 공백을 전각으로 올려 칸 수를 안 늘리고 바이트를
+    먹는다. **기본은 꺼 둔다** — 모든 페이지에 쓰면 파일 전체의 압축률이 떨어져
+    엔트리가 원래 자리에 안 들어간다(그러면 게임이 옛 자리를 읽는 일이 생긴다).
+    대화창을 넘치는 페이지에만 켜서 쓴다.
+    """
     need = len(opage) - len(enc)
     if need <= 0:
         return bytes(enc)
-    enc, used = _upgrade_spaces(enc, need)              # 칸 수를 안 늘리는 몫 먼저
-    need -= used
+    if upgrade:
+        enc, used = _upgrade_spaces(enc, need)          # 칸 수를 안 늘리는 몫 먼저
+        need -= used
     if need <= 0:
         return bytes(enc)
     lines = split_lines(enc)
@@ -275,7 +282,8 @@ def _join(lines) -> bytes:
     return bytes([NEWLINE]).join(b" ".join(l) for l in lines)
 
 
-def rewrap(page: bytes, budget: int, box: int = BOX, rows: int = ROWS, to_text=None):
+def rewrap(page: bytes, budget: int, box: int = BOX, rows: int = ROWS, to_text=None,
+           upgrade: bool = False):
     """**낱말은 그대로 두고 줄바꿈만 다시 잡아** 대화창 안에 넣어 본다.
 
     20칸을 넘는 줄은 게임이 알아서 나누므로, 두 줄짜리 21칸+21칸 페이지는 화면에서
@@ -304,6 +312,32 @@ def rewrap(page: bytes, budget: int, box: int = BOX, rows: int = ROWS, to_text=N
         out = _join(lines)
         if len(out) > budget:
             continue
-        if visual_lines(pad_page(out, bytes(budget)), box) <= rows:
+        if visual_lines(pad_page(out, bytes(budget), upgrade), box) <= rows:
             return out
     return None
+
+
+def fit(enc: bytes, opage: bytes, to_text=None):
+    """페이지를 대화창(20칸 x 3줄) 안에 넣는다. `(채운바이트, 몇단계로 됐나)` 를 돌려준다.
+
+    손대는 정도가 작은 것부터 차례로 해 본다.
+      0. 그대로 채우기 — 원본과 바이트가 같아 압축률도 그대로다.
+      1. 줄바꿈만 다시 잡기 — 낱말은 그대로, 바이트 수도 그대로.
+      2. 낱말 사이 공백을 전각으로 올려 채우기 — 화면은 그대로, 압축률만 조금 손해.
+      3. 둘 다.
+    앞 단계로 되면 뒤 단계는 안 쓴다. 공백 승격을 모든 페이지에 쓰면 파일 전체 압축률이
+    떨어져 엔트리가 제자리에 못 들어간다.
+    """
+    plain = pad_page(enc, opage)
+    if visual_lines(plain) <= ROWS:
+        return plain, 0
+    again = rewrap(enc, len(opage), to_text=to_text)
+    if again is not None:
+        return pad_page(again, opage), 1
+    up = pad_page(enc, opage, upgrade=True)
+    if visual_lines(up) <= ROWS:
+        return up, 2
+    again = rewrap(enc, len(opage), to_text=to_text, upgrade=True)
+    if again is not None:
+        return pad_page(again, opage, upgrade=True), 3
+    return plain, -1

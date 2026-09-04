@@ -100,12 +100,8 @@ def rebuild_section(section, edits, syll2code, report, label, to_text=None):
             if len(enc) > len(opage):
                 too_long = True
                 break
-            # 대화창(20칸 x 3줄)을 넘치면 낱말은 그대로 두고 줄바꿈만 다시 잡는다.
-            if pagepad.visual_lines(pagepad.pad_page(enc, opage)) > pagepad.ROWS:
-                again = pagepad.rewrap(enc, len(opage), to_text=to_text)
-                if again is not None:
-                    enc = again
-            padded = pad_page(enc, opage)
+            # 대화창(20칸 x 3줄) 안에 넣는다 — 손대는 정도가 작은 것부터.
+            padded, _how = pagepad.fit(enc, opage, to_text)
             # 3줄을 넘으면 뒤로 밀려 빈 대화창이 생긴다 — 반드시 알린다.
             rows = pagepad.visual_lines(padded)
             if rows > pagepad.ROWS:

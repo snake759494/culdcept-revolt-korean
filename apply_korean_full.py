@@ -181,7 +181,7 @@ def main():
     trunc_src = [""]
     wide_warnings = []
     over_pages = []                      # 대화창 3줄을 넘치는 페이지(--report)
-    n_rewrap = [0]                       # 줄바꿈만 다시 잡아 고친 페이지 수
+    n_fix = {1: 0, 2: 0, 3: 0}           # 어느 단계로 대화창에 넣었나
 
     def trunc(bs, limit):
         # 잘리면 화면에서 글자가 사라진다. 조용히 넘어가면 번역을 고칠 때
@@ -212,38 +212,27 @@ def main():
         return "".join(out)
 
     def pad_page(enc, opage):
-        """페이지를 원본 바이트 길이에 맞춘다 — 채움은 **전각 공백**.
+        """페이지를 원본 바이트 길이에 맞추고 **대화창(20칸 x 3줄) 안에** 넣는다.
 
-        예전에는 반각 공백(0x20)으로 각 줄을 원본 줄의 **바이트 길이**까지
-        채웠다. 근거는 "공백은 1바이트니 2바이트 글자보다 좁다"였는데, 이
-        폰트는 고정폭이라 **반각 공백도 한 칸을 그대로 차지한다**. 그래서
-        40바이트(20칸) 원문 줄 자리에 30바이트 한글(16칸)을 넣고 10바이트를
-        반각 공백으로 채우면 26칸이 되어 대화창을 넘고, 넘친 만큼이 빈
-        대화창으로 보였다(이슈 #24 재발 · #29). 전각 공백은 2바이트에 한 칸이라
-        원문과 밀도가 같다. 자세한 건 culdcept/pagepad.py 참고.
+        예전에는 반각 공백(0x20)으로 각 줄을 원본 줄의 **바이트 길이**까지 채웠다.
+        근거는 "공백은 1바이트니 2바이트 글자보다 좁다"였는데, 이 폰트는 고정폭이라
+        **반각 공백도 한 칸을 그대로 차지한다**. 그래서 40바이트(20칸) 원문 줄 자리에
+        30바이트 한글(16칸)을 넣고 10바이트를 반각 공백으로 채우면 26칸이 되어
+        대화창을 넘고, 넘친 만큼이 빈 대화창으로 보였다(이슈 #24 재발 · #29).
+
+        손대는 정도가 작은 것부터 차례로 해 본다 — 자세한 건 culdcept/pagepad.fit().
         """
-        out = pagepad.pad_page(enc, opage)
-        # 대화창은 20칸 x 3줄이다. 20칸을 넘는 줄은 게임이 알아서 나누므로 그 자체가
-        # 결함은 아니고, **나눈 뒤 3줄을 넘는 페이지**가 밀려서 빈 대화창을 만든다.
-        # 넘치면 먼저 **낱말은 그대로 두고 줄바꿈만 다시 잡아** 본다. 두 줄짜리
-        # 19칸+19칸 페이지는 채움을 넣으면 21칸+21칸=네 줄이 되는데, 같은 낱말을
-        # 세 줄로 나눠 두면 세 줄에 머문다(글자는 하나도 안 바뀐다).
-        if pagepad.visual_lines(out) > pagepad.ROWS:
-            again = pagepad.rewrap(enc, len(opage), to_text=to_text)
-            if again is not None:
-                enc = again
-                out = pagepad.pad_page(again, opage)
-                n_rewrap[0] += 1
+        out, how = pagepad.fit(enc, opage, to_text)
+        if how > 0:
+            n_fix[how] += 1
         rows = pagepad.visual_lines(out)
         if rows > pagepad.ROWS:
-            bare = pagepad.visual_lines(enc)
-            over_pages.append({"어디": trunc_src[0], "줄수": rows, "채움없이": bare,
+            over_pages.append({"어디": trunc_src[0], "줄수": rows,
+                               "채움없이": pagepad.visual_lines(enc),
                                "예산바이트": len(opage),
                                "칸": [pagepad.cells(l) for l in pagepad.split_lines(out)],
                                "바이트": bytes(enc).hex(),
                                "본문": enc.decode("cp932", "replace")})
-            if bare <= pagepad.ROWS:     # 채움 때문에 넘어간 경우만 따로 센다
-                wide_warnings.append((rows, bare, trunc_src[0]))
         return out
 
     def pad_fill(view, tokens, syll2code, enc, target):
@@ -570,8 +559,9 @@ def main():
         # 무엇이 잘렸는지 모르면 고칠 수 없다. 어디서 몇 바이트 넘쳤는지 함께 남긴다.
         for w, l, src, cut in trunc_warnings[:40]:
             print("      +%d  %s" % (w - l, src))
-    if n_rewrap[0]:
-        print("  줄바꿈을 다시 잡아 대화창에 넣은 페이지 %d개 (낱말은 그대로)" % n_rewrap[0])
+    if any(n_fix.values()):
+        print("  대화창에 넣으려고 손댄 페이지: 줄바꿈 %d개 / 공백 승격 %d개 / 둘 다 %d개"
+              " (낱말은 그대로)" % (n_fix[1], n_fix[2], n_fix[3]))
     if over_pages:
         print("  ! 대화창(%d칸 x %d줄)을 넘치는 페이지 %d개 — 뒤로 밀려 빈 대화창이 생긴다"
               % (pagepad.BOX, pagepad.ROWS, len(over_pages)))
