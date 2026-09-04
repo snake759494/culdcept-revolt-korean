@@ -85,29 +85,41 @@ def shrink_container(container, budget):
     return container
 
 
-def pack(data, typ):
-    """엔트리/섹션을 다시 압축한다 — **진짜 압축기를 먼저 쓴다.**
+def pack(data, typ, budget=None):
+    """엔트리/섹션을 **가장 작게** 다시 압축한다.
 
-    `huffman.compress()` 는 전부 리터럴로 내보내서 결과가 원본의 3배쯤 된다.
-    그러면 엔트리가 원래 자리에 안 들어가 파일 끝으로 밀리는데, 그 상태에서
-    게임이 옛 자리를 읽어 원문을 보여 주는 일이 있었다(이슈 #27). 실제로
-    2장 시나리오 s3 는 5,592 -> 15,809 바이트로 부풀어 있었다.
-    compress_real() 은 같은 섹션을 5,608 바이트로 만든다 — 원본과 거의 같다.
+    작게 만드는 게 왜 중요한가: 원래 크기에 안 들어가면 엔트리가 파일 끝으로
+    밀리는데, 그 상태에서 게임이 **옛 자리를 읽어** 원문을 그대로 보여 주는 일이
+    있었다(이슈 #27, 그리고 #28의 "한 퀘스트 전체 대사 미번역" = 엔트리 1947).
+
+    두 가지를 한다.
+      * `huffman.compress()` 는 전부 리터럴로 내보내 결과가 3~5배가 된다. 진짜
+        압축기 `compress_real()` 을 먼저 쓴다(2장 s3: 15,809 -> 5,608바이트).
+      * 코덱 0x08(창 0x0d)과 0x0c(창 0x10)를 **둘 다** 해 보고 작은 쪽을 쓴다.
+        게임은 첫 바이트로 코덱을 고르므로 어느 쪽으로 써도 정상이다. 원본에도
+        0x0c 엔트리가 692개 있다.
+
+    0x0d/0x8d(레인지 코더)는 다시 압축할 방법이 없어 huffman 으로 바꿔 쓴다.
+    타입을 그대로 넘기면 compress_real 이 거부해 전량 리터럴로 떨어진다.
     """
-    # 0x0d/0x8d(레인지 코더)는 다시 압축할 방법이 없다. 그렇다고 typ 을 그대로
-    # 넘기면 compress_real 이 거부해서 **전량 리터럴**로 떨어지는데, 그러면
-    # 엔트리가 4~5배로 부풀어(e1669: 61,524 -> 299,407) 원래 자리에 못 들어가고
-    # 파일 끝으로 밀린다. 게임은 타입 바이트로 코덱을 고르므로 huffman(0x08)로
-    # 바꿔 써도 정상이다 — 진짜 압축기를 태우면 대개 원래 자리에 들어간다
-    # (e1601: 158,396 -> 35,591 <= 슬롯 37,961).
-    ctyp = typ if typ in (0x08, 0x0C) else 0x08
-    try:
-        out = huffman.compress_real(data, ctyp, effort=3)
-        if huffman.decompress(out) == data:
-            return out
-    except Exception:                                      # noqa: BLE001
-        pass
-    return huffman.compress(data, typ=ctyp)                # 안 되면 원래 방식
+    # 원래 코덱을 먼저 쓰고, 자리에 안 들어갈 때만 다른 코덱을 시도한다.
+    order = [typ] if typ in (0x08, 0x0C) else []
+    order += [t for t in (0x0C, 0x08) if t not in order]
+    best = None
+    for ctyp in order:
+        try:
+            cand = huffman.compress_real(data, ctyp, effort=3, budget=budget)
+        except Exception:                                  # noqa: BLE001
+            continue
+        if huffman.decompress(cand) != data:
+            continue
+        if best is None or len(cand) < len(best):
+            best = cand
+        if budget is None or len(best) <= budget:
+            break                                          # 자리에 들어가면 그만
+    if best is not None:
+        return best
+    return huffman.compress(data, typ=0x08)                # 안 되면 원래 방식
 
 
 def main():
