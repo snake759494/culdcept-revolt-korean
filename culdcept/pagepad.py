@@ -185,7 +185,7 @@ DANGLING = frozenset((
     "만큼", "내", "번", "온",
 ))
 # 관형형 어미 — 뒤에 꾸밈을 받을 말이 반드시 온다.
-DANGLING_TAIL = ("는", "던", "할", "될", "인는")
+DANGLING_TAIL = ("는", "던", "할", "될", "된", "한")
 
 
 def _dangles(word: bytes, to_text) -> bool:
