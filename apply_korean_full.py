@@ -60,28 +60,39 @@ def shrink_container(container, budget):
     """컨테이너가 원래 엔트리 크기를 넘으면 **손대지 않은 섹션까지 다시 압축**한다.
 
     엔트리가 원래 자리에 안 들어가면 파일 끝으로 밀리는데, 그러면 게임이 옛
-    자리를 읽어 원문을 보여 주는 일이 있었다(이슈 #27). 우리 압축기는 게임의
+    자리를 읽어 원문을 보여 주는 일이 있었다(이슈 #27/#28). 우리 압축기는 게임의
     자체 인코더보다 결과가 작을 때가 많으므로, 번역하지 않은 섹션을 다시 눌러
-    번역한 섹션이 커진 만큼을 상쇄한다.
+    번역한 섹션이 커진 만큼을 상쇄한다. 코덱도 0x08(창 0x0d)·0x0c(창 0x10) 둘 다
+    해 보고 작은 쪽을 쓴다 — 엔트리 1947 은 이 차이로 제자리에 들어간다.
+
+    ★ 섹션 하나를 바꾸면 그 뒤 섹션의 오프셋이 전부 밀린다. 그래서 매번 헤더를
+      **다시 읽어야** 한다. 한 번만 읽어 두고 돌면 두 번째 섹션부터 엉뚱한 자리를
+      집어 해제가 실패하고, 그대로 조용히 건너뛴다.
     """
-    if len(container) <= budget:
-        return container
-    sections = scen.parse_sections(container)
-    if not sections:
-        return container
-    for k, (off, ln) in enumerate(sections):
-        if not ln or container[off] not in (0x08, 0x0C):
+    k = 0
+    while len(container) > budget:
+        sections = scen.parse_sections(container)
+        if not sections or k >= len(sections):
+            break
+        off, ln = sections[k]
+        k += 1
+        if not ln or off + ln > len(container) or container[off] not in (0x08, 0x0C):
             continue
         blob = container[off:off + ln]
         try:
             dec = huffman.decompress(blob)
-            cand = huffman.compress_real(dec, blob[0], effort=3)
         except Exception:                                  # noqa: BLE001
             continue
-        if len(cand) < len(blob) and huffman.decompress(cand) == dec:
-            container = scen.rebuild_container(container, k, cand)
-        if len(container) <= budget:
-            break
+        cand = None
+        for ctyp in (0x08, 0x0C):
+            try:
+                out = huffman.compress_real(dec, ctyp, effort=3)
+            except Exception:                              # noqa: BLE001
+                continue
+            if huffman.decompress(out) == dec and (cand is None or len(out) < len(cand)):
+                cand = out
+        if cand is not None and len(cand) < len(blob):
+            container = scen.rebuild_container(container, k - 1, cand)
     return container
 
 
@@ -193,10 +204,13 @@ def main():
         원문과 밀도가 같다. 자세한 건 culdcept/pagepad.py 참고.
         """
         out = pagepad.pad_page(enc, opage)
-        # 원본보다 넓어진 줄은 대화창을 넘겨 빈 페이지를 만든다 — 반드시 알린다.
-        was, now = pagepad.widest(opage), pagepad.widest(out)
-        if now > was:
-            wide_warnings.append((now, was, trunc_src[0]))
+        # 대화창은 20칸이다(원본 대사 줄 폭을 전수로 세면 거기서 끊긴다). 넘으면
+        # 게임이 줄을 바꿔 페이지가 밀리고 **빈 대화창**이 한 장 생긴다.
+        # 번역문 자체가 이미 넘는 건 여기서 못 고치므로, **채움 때문에 넘어간
+        # 경우만** 보고한다.
+        now = pagepad.widest(out)
+        if now > pagepad.BOX and now > pagepad.widest(enc):
+            wide_warnings.append((now, pagepad.widest(enc), trunc_src[0]))
         return out
 
     def pad_fill(view, tokens, syll2code, enc, target):
@@ -524,10 +538,10 @@ def main():
         for w, l, src, cut in trunc_warnings[:40]:
             print("      +%d  %s" % (w - l, src))
     if wide_warnings:
-        print("  ! 원본보다 넓어진 줄 %d개 (대화창 넘침·빈 페이지 위험)"
-              % len(wide_warnings))
+        print("  ! 채움 때문에 대화창(%d칸)을 넘은 줄 %d개 (빈 대화창 위험)"
+              % (pagepad.BOX, len(wide_warnings)))
         for now, was, src in sorted(wide_warnings, reverse=True)[:40]:
-            print("      %d칸 > 원본 %d칸  %s" % (now, was, src))
+            print("      %d칸 (번역문만 %d칸)  %s" % (now, was, src))
     d.replace_entry(FONT_ENTRY, new_font)
     d.replace_entry(UI_ENTRY, new_ui)
     open(args.outfile, "wb").write(d.build())

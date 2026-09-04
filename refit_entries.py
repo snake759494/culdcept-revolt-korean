@@ -51,21 +51,23 @@ def shrink(entry, budget):
     if entry and entry[0] in (0x08, 0x0C):              # 통째로 압축된 엔트리
         cand = best_pack(entry, budget)
         return cand if cand is not None and len(cand) < len(entry) else entry
-    try:
-        secs = scen.parse_sections(entry)
-    except Exception:                                   # noqa: BLE001
-        secs = None
-    if not secs:
-        return entry
-    for k, (off, length) in enumerate(secs):
-        if not length or entry[off] not in (0x08, 0x0C):
+    # ★ 섹션 하나를 바꾸면 그 뒤 섹션 오프셋이 밀린다 — 매번 헤더를 다시 읽는다.
+    k = 0
+    while len(entry) > budget:
+        try:
+            secs = scen.parse_sections(entry)
+        except Exception:                               # noqa: BLE001
+            break
+        if not secs or k >= len(secs):
+            break
+        off, length = secs[k]
+        k += 1
+        if not length or off + length > len(entry) or entry[off] not in (0x08, 0x0C):
             continue
         blob = entry[off:off + length]
         cand = best_pack(blob)
         if cand is not None and len(cand) < len(blob):
-            entry = scen.rebuild_container(entry, k, cand)
-        if len(entry) <= budget:
-            break
+            entry = scen.rebuild_container(entry, k - 1, cand)
     return entry
 
 
