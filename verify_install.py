@@ -789,7 +789,7 @@ def _check_update_code(user_dir: Path) -> Check:
 # 라고 적혀 있어, 릴리즈마다 xdelta 를 다시 적용해야 한다는 걸 놓치기 쉽다.
 # 그래서 SHA-256 으로 **어느 판인지 정확히** 찍어 준다.
 RELEASE_DAT_SHA = "b51c535dda74d72ca6ddaae7f69d5a834512fbd42be5c43f9c83d10903b8c19d"
-RELEASE_NAME = "v2.20"
+RELEASE_NAME = "v2.21(본편 DAT 은 v2.20 과 같습니다)"
 KNOWN_DAT_SHA = {
     "82cedc2e6d91ef28b1cf776e7dd0219be5fcefe5b325a980c78dc1107edb8562": "v2.17",
     "d457cd6a2a1cce0955347170d709571f1092805b6a1c52ce7a25976fd0af0f94": "v2.18",
