@@ -47,7 +47,30 @@ def pad_page(enc, opage):
     return pagepad.pad_page(enc, opage)
 
 
-def rebuild_section(section, edits, syll2code, report, label):
+def make_to_text(syll2code):
+    """게임 바이트 낱말을 **읽을 수 있는 한글**로 바꾸는 함수를 만든다.
+
+    한글은 JIS 제1수준 한자 슬롯을 빌려 쓰므로 cp932 로 풀면 한자가 나온다.
+    줄바꿈 자리를 고를 때 "-는·-한 으로 줄을 끝내지 않기" 같은 판단에 필요하다.
+    """
+    code2syll = {v: k for k, v in syll2code.items()}
+
+    def to_text(word):
+        out, i = [], 0
+        while i < len(word):
+            step = pagepad._step(word, i)
+            if step == 2 and 0x81 <= word[i] <= 0xFC:
+                ch = code2syll.get((word[i] << 8) | word[i + 1])
+                out.append(ch if ch else word[i:i + 2].decode("cp932", "replace"))
+            elif word[i] >= 0x20:
+                out.append(chr(word[i]) if word[i] < 0x80 else "?")
+            i += step
+        return "".join(out)
+
+    return to_text
+
+
+def rebuild_section(section, edits, syll2code, report, label, to_text=None):
     """번역할 문자열을 **페이지 길이를 보존한 채** 제자리 교체한다.
 
     게임은 페이지(0x07)와 문자열 끝(0x00)의 바이트 위치를 그대로 참조하므로,
@@ -79,15 +102,16 @@ def rebuild_section(section, edits, syll2code, report, label):
                 break
             # 대화창(20칸 x 3줄)을 넘치면 낱말은 그대로 두고 줄바꿈만 다시 잡는다.
             if pagepad.visual_lines(pagepad.pad_page(enc, opage)) > pagepad.ROWS:
-                again = pagepad.rewrap(enc, len(opage))
+                again = pagepad.rewrap(enc, len(opage), to_text=to_text)
                 if again is not None:
                     enc = again
             padded = pad_page(enc, opage)
-            # 원본보다 넓어진 줄은 대화창을 넘겨 빈 페이지를 만든다 — 반드시 알린다.
-            if pagepad.widest(padded) > pagepad.widest(opage):
-                report.append("  ! %s 0x%x p%d 줄 폭 초과 %d칸 > 원본 %d칸"
-                              % (label, offset, index,
-                                 pagepad.widest(padded), pagepad.widest(opage)))
+            # 3줄을 넘으면 뒤로 밀려 빈 대화창이 생긴다 — 반드시 알린다.
+            rows = pagepad.visual_lines(padded)
+            if rows > pagepad.ROWS:
+                report.append("  ! %s 0x%x p%d 대화창을 넘침 %d줄 (칸 %s)"
+                              % (label, offset, index, rows,
+                                 [pagepad.cells(l) for l in pagepad.split_lines(padded)]))
             rebuilt += padded
             if index < len(opages) - 1:
                 rebuilt += bytes([PAGE])
@@ -139,7 +163,8 @@ def patch_resource(raw, name, texts, syll2code, report):
         if not edits:
             blobs.append(blob)
             continue
-        section = rebuild_section(section, edits, syll2code, report, label)
+        section = rebuild_section(section, edits, syll2code, report, label,
+                                  make_to_text(syll2code))
 
         packed = huffman.compress_real(section, blob[0], effort=3)
         if huffman.decompress(packed) != section:
