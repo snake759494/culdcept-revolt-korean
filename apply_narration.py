@@ -18,7 +18,7 @@ Culdcept Revolt 의 시작화면·튜토리얼·덱선택·배틀중단 나레�
 텍스처 포맷 상세는 docs/FORMAT.md §7 참고.
 """
 import struct, sys, os, json, numpy as np
-from culdcept import huffman
+from culdcept import dat as datmod, huffman
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -124,11 +124,12 @@ def main(in_dat, out_dat, decode_0d):
             b = b + b"\x00" * (need - len(b))
         for ts, lines in groups[128]: b = inject(b, ts, lines, 128)   # 3~4줄 먼저
         for ts, lines in groups[64]:  b = inject(b, ts, lines, 64)    # 1~2줄 나중
-        enc = huffman.compress(b, 0x08)                                 # 0x0d→0x08 무압축 우회
-        if len(d) % 16: d += b"\x00" * (16 - (len(d) % 16))
-        new_off = len(d); d += enc
-        struct.pack_into("<I", d, ent * 8, new_off)
-        struct.pack_into("<I", d, ent * 8 + 4, len(enc))
+        # 0x0d 는 다시 압축할 방법이 없어 huffman 으로 바꿔 쓴다. 전량 리터럴로
+        # 쓰면 3~5배가 되어 파일 끝으로 밀리는데, 밀린 엔트리는 게임이 옛 자리를
+        # 읽는 일이 있다(이슈 #27/#28). 진짜 압축기로 가장 작게 만든다.
+        enc = huffman.pack_smallest(b, 0x08)
+        assert huffman.decompress(enc) == b, "재압축 왕복 검증 실패"
+        datmod.write_entry(d, ent, enc)
     open(out_dat, "wb").write(d)
     print(f"나레이션 {sum(len(v[64]) + len(v[128]) for v in per_entry.values())}종 주입 -> {out_dat}")
 

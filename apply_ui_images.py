@@ -36,7 +36,7 @@ import sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from culdcept import huffman
+from culdcept import dat as datmod, huffman
 from culdcept.etc1 import decode_all_blocks, encode_block
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -171,14 +171,12 @@ def main(in_dat, out_dat, ttf, spec_path=None):
             raise SystemExit(f"엔트리 {ent} 타입 0x{typ:02x} 는 지원하지 않습니다(0x08/0x0c 만).")
         raw = huffman.decompress(bytes(d[off:off + size]))
         patched, changed = patch_atlas(raw, atlas, ttf)
-        enc = huffman.compress(patched, 0x08)             # 0x08 = 무압축 리터럴
+        # 전량 리터럴로 쓰면 엔트리가 3~5배가 되어 원래 자리에 못 들어가고 파일
+        # 끝으로 밀린다. 밀리면 게임이 옛 자리를 읽는 일이 있어(이슈 #27/#28)
+        # 진짜 압축기로 가장 작게 만들어 되도록 제자리에 넣는다.
+        enc = huffman.pack_smallest(patched, typ)
         assert huffman.decompress(enc) == patched, "재압축 왕복 검증 실패"
-        if len(d) % 16:
-            d += b"\x00" * (16 - (len(d) % 16))           # 16바이트 정렬
-        new_off = len(d)
-        d += enc
-        struct.pack_into("<I", d, ent * 8, new_off)
-        struct.pack_into("<I", d, ent * 8 + 4, len(enc))
+        datmod.write_entry(d, ent, enc)
         total += changed
         print(f"  {atlas['name']:16s} 엔트리 {ent:4d}  라벨 {len(atlas['labels']):2d}개  "
               f"재인코딩 {changed:5d}블록")

@@ -58,3 +58,28 @@ class Dat:
 
     def build(self) -> bytes:
         return bytes(self.data)
+
+
+def write_entry(data: bytearray, index: int, blob: bytes) -> None:
+    """`data`(파일 전체)의 엔트리 i 를 `blob` 으로 바꾼다.
+
+    들어가면 **원래 자리에 덮어쓴다.** 안 들어가 파일 끝에 붙일 때는 **옛 바이트를
+    0으로 지운다.** 헤더만 새 자리로 바꾸고 옛 바이트를 남겨 두면, 게임이 그쪽을
+    읽어 원문을 그대로 보여 주는 일이 있다(이슈 #27/#28 — 카드 이름·퀘스트 대사).
+
+    `Dat.replace_entry` 와 같은 규칙이지만, Dat 객체 없이 바이트열만 다루는
+    도구(apply_ui_images.py·apply_narration.py)를 위한 것이다.
+    """
+    off, size = struct.unpack_from("<II", data, index * 8)
+    if len(blob) <= size:
+        data[off:off + len(blob)] = blob
+        if len(blob) < size:
+            data[off + len(blob):off + size] = bytes(size - len(blob))
+        struct.pack_into("<II", data, index * 8, off, len(blob))
+        return
+    data[off:off + size] = bytes(size)                  # 옛 바이트 제거
+    if len(data) % 16:
+        data += b"\x00" * (16 - (len(data) % 16))       # 16바이트 정렬
+    new_off = len(data)
+    data += blob
+    struct.pack_into("<II", data, index * 8, new_off, len(blob))

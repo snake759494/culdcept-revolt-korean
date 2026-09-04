@@ -849,3 +849,22 @@ if __name__ == "__main__":
             e = compress_real(d, t, 2, budget=1)     # forces the escalation path
             assert decompress(e) == d, (t, "budget", len(d))
     print("compress_real round-trip OK")
+
+
+def pack_smallest(data, prefer=0x08):
+    """같은 내용을 **가장 작게** 담는 0x08/0x0c 블롭.
+
+    진짜 압축기가 실패하면 전량 리터럴로 떨어뜨린다(항상 성공하지만 3~5배로
+    부푼다). 작게 만드는 게 중요한 이유는, 원래 크기에 안 들어간 엔트리가 파일
+    끝으로 밀리면 게임이 옛 자리를 읽는 일이 있기 때문이다(이슈 #27/#28).
+    """
+    best = None
+    order = [prefer] + [t for t in (0x08, 0x0C) if t != prefer]
+    for typ in order:
+        try:
+            cand = compress_real(data, typ, effort=3)
+        except Exception:                               # noqa: BLE001
+            continue
+        if decompress(cand) == data and (best is None or len(cand) < len(best)):
+            best = cand
+    return best if best is not None else compress(data, prefer if prefer in (0x08, 0x0C) else 0x08)
