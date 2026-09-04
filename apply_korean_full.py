@@ -138,6 +138,8 @@ def main():
     ap.add_argument("infile")
     ap.add_argument("outfile")
     ap.add_argument("--font", default=None)
+    ap.add_argument("--report", default=None, metavar="JSON",
+                    help="대화창(20칸x3줄)을 넘치는 페이지 목록을 JSON 으로 남긴다")
     args = ap.parse_args()
 
     ttf = pick_font(args.font)
@@ -178,6 +180,8 @@ def main():
     trunc_warnings = []
     trunc_src = [""]
     wide_warnings = []
+    over_pages = []                      # 대화창 3줄을 넘치는 페이지(--report)
+    n_rewrap = [0]                       # 줄바꿈만 다시 잡아 고친 페이지 수
 
     def trunc(bs, limit):
         # 잘리면 화면에서 글자가 사라진다. 조용히 넘어가면 번역을 고칠 때
@@ -204,13 +208,27 @@ def main():
         원문과 밀도가 같다. 자세한 건 culdcept/pagepad.py 참고.
         """
         out = pagepad.pad_page(enc, opage)
-        # 대화창은 20칸이다(원본 대사 줄 폭을 전수로 세면 거기서 끊긴다). 넘으면
-        # 게임이 줄을 바꿔 페이지가 밀리고 **빈 대화창**이 한 장 생긴다.
-        # 번역문 자체가 이미 넘는 건 여기서 못 고치므로, **채움 때문에 넘어간
-        # 경우만** 보고한다.
-        now = pagepad.widest(out)
-        if now > pagepad.BOX and now > pagepad.widest(enc):
-            wide_warnings.append((now, pagepad.widest(enc), trunc_src[0]))
+        # 대화창은 20칸 x 3줄이다. 20칸을 넘는 줄은 게임이 알아서 나누므로 그 자체가
+        # 결함은 아니고, **나눈 뒤 3줄을 넘는 페이지**가 밀려서 빈 대화창을 만든다.
+        # 넘치면 먼저 **낱말은 그대로 두고 줄바꿈만 다시 잡아** 본다. 두 줄짜리
+        # 19칸+19칸 페이지는 채움을 넣으면 21칸+21칸=네 줄이 되는데, 같은 낱말을
+        # 세 줄로 나눠 두면 세 줄에 머문다(글자는 하나도 안 바뀐다).
+        if pagepad.visual_lines(out) > pagepad.ROWS:
+            again = pagepad.rewrap(enc, len(opage))
+            if again is not None:
+                enc = again
+                out = pagepad.pad_page(again, opage)
+                n_rewrap[0] += 1
+        rows = pagepad.visual_lines(out)
+        if rows > pagepad.ROWS:
+            bare = pagepad.visual_lines(enc)
+            over_pages.append({"어디": trunc_src[0], "줄수": rows, "채움없이": bare,
+                               "예산바이트": len(opage),
+                               "칸": [pagepad.cells(l) for l in pagepad.split_lines(out)],
+                               "바이트": bytes(enc).hex(),
+                               "본문": enc.decode("cp932", "replace")})
+            if bare <= pagepad.ROWS:     # 채움 때문에 넘어간 경우만 따로 센다
+                wide_warnings.append((rows, bare, trunc_src[0]))
         return out
 
     def pad_fill(view, tokens, syll2code, enc, target):
@@ -537,11 +555,20 @@ def main():
         # 무엇이 잘렸는지 모르면 고칠 수 없다. 어디서 몇 바이트 넘쳤는지 함께 남긴다.
         for w, l, src, cut in trunc_warnings[:40]:
             print("      +%d  %s" % (w - l, src))
+    if n_rewrap[0]:
+        print("  줄바꿈을 다시 잡아 대화창에 넣은 페이지 %d개 (낱말은 그대로)" % n_rewrap[0])
+    if over_pages:
+        print("  ! 대화창(%d칸 x %d줄)을 넘치는 페이지 %d개 — 뒤로 밀려 빈 대화창이 생긴다"
+              % (pagepad.BOX, pagepad.ROWS, len(over_pages)))
+        for row in sorted(over_pages, key=lambda r: -r["줄수"])[:20]:
+            print("      %d줄 %s" % (row["줄수"], row["어디"]))
     if wide_warnings:
-        print("  ! 채움 때문에 대화창(%d칸)을 넘은 줄 %d개 (빈 대화창 위험)"
-              % (pagepad.BOX, len(wide_warnings)))
-        for now, was, src in sorted(wide_warnings, reverse=True)[:40]:
-            print("      %d칸 (번역문만 %d칸)  %s" % (now, was, src))
+        print("      그중 %d개는 **채움 때문에** 넘었다(번역문만으로는 들어간다)"
+              % len(wide_warnings))
+    if args.report:
+        with open(args.report, "w", encoding="utf-8") as handle:
+            json.dump(over_pages, handle, ensure_ascii=False, indent=1)
+        print("  넘친 페이지 목록 -> %s" % args.report)
     d.replace_entry(FONT_ENTRY, new_font)
     d.replace_entry(UI_ENTRY, new_ui)
     open(args.outfile, "wb").write(d.build())
