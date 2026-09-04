@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 from apply_dlc_text import RESOURCE_EXT, make_ips, romfs_files, syllable_map
-from culdcept import dlcres, dlctext, huffman, scen
+from culdcept import dlcres, dlctext, huffman, pagepad, scen
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -39,28 +39,12 @@ PAGE_MARK = "▼"
 
 
 def pad_page(enc, opage):
-    """페이지를 원본 길이에 맞추되 공백을 **각 줄 끝에** 나눠 넣는다.
+    """페이지를 원본 길이에 맞춘다 — 채움은 **전각 공백**(culdcept.pagepad).
 
-    이 폰트는 고정폭이라 공백 하나가 글자 한 칸을 그대로 차지한다. 모자란 만큼을
-    페이지 맨 뒤에 몰아 붙이면 그 공백이 마지막 줄을 넘겨 대화창 밖으로 흘러
-    **빈 페이지가 한 장 더** 생긴다(본편에서 확인된 이슈 #24 "대사창 공백").
-    각 줄을 원본의 같은 줄 길이까지만 채우면 어떤 줄도 원본보다 넓어지지 않는다.
+    반각 공백으로 채우던 예전 방식은 고정폭 폰트에서 줄을 최대 두 배까지 넓혀
+    대화창을 넘겼고, 넘친 만큼이 **빈 대화창**으로 보였다(이슈 #29).
     """
-    need = len(opage) - len(enc)
-    if need <= 0:
-        return enc
-    klines = bytes(enc).split(bytes([0x0A]))
-    olines = opage.split(bytes([0x0A]))
-    out = []
-    for i, kl in enumerate(klines):
-        room = len(olines[i]) - len(kl) if i < len(olines) else 0
-        take = max(0, min(room, need))
-        out.append(bytes(kl) + bytes([PAD]) * take)
-        need -= take
-    res = bytes([0x0A]).join(out)
-    if need > 0:
-        res += bytes([PAD]) * need
-    return res if len(res) == len(opage) else enc + bytes([PAD]) * (len(opage) - len(enc))
+    return pagepad.pad_page(enc, opage)
 
 
 def rebuild_section(section, edits, syll2code, report, label):
@@ -93,7 +77,13 @@ def rebuild_section(section, edits, syll2code, report, label):
             if len(enc) > len(opage):
                 too_long = True
                 break
-            rebuilt += pad_page(enc, opage)
+            padded = pad_page(enc, opage)
+            # 원본보다 넓어진 줄은 대화창을 넘겨 빈 페이지를 만든다 — 반드시 알린다.
+            if pagepad.widest(padded) > pagepad.widest(opage):
+                report.append("  ! %s 0x%x p%d 줄 폭 초과 %d칸 > 원본 %d칸"
+                              % (label, offset, index,
+                                 pagepad.widest(padded), pagepad.widest(opage)))
+            rebuilt += padded
             if index < len(opages) - 1:
                 rebuilt += bytes([PAGE])
         if too_long:

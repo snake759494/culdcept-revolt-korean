@@ -29,7 +29,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-from culdcept import dat as datmod, huffman, font as fontmod, scen, wansung, cardtext
+from culdcept import dat as datmod, huffman, font as fontmod, pagepad, scen, wansung, cardtext
 from opening_ko import UI_KO, SETUP_KO
 
 FONT_ENTRY, UI_ENTRY = 1054, 1190
@@ -54,6 +54,60 @@ def pick_font(explicit):
         if os.path.exists(p):
             return p
     return None
+
+
+def shrink_container(container, budget):
+    """컨테이너가 원래 엔트리 크기를 넘으면 **손대지 않은 섹션까지 다시 압축**한다.
+
+    엔트리가 원래 자리에 안 들어가면 파일 끝으로 밀리는데, 그러면 게임이 옛
+    자리를 읽어 원문을 보여 주는 일이 있었다(이슈 #27). 우리 압축기는 게임의
+    자체 인코더보다 결과가 작을 때가 많으므로, 번역하지 않은 섹션을 다시 눌러
+    번역한 섹션이 커진 만큼을 상쇄한다.
+    """
+    if len(container) <= budget:
+        return container
+    sections = scen.parse_sections(container)
+    if not sections:
+        return container
+    for k, (off, ln) in enumerate(sections):
+        if not ln or container[off] not in (0x08, 0x0C):
+            continue
+        blob = container[off:off + ln]
+        try:
+            dec = huffman.decompress(blob)
+            cand = huffman.compress_real(dec, blob[0], effort=3)
+        except Exception:                                  # noqa: BLE001
+            continue
+        if len(cand) < len(blob) and huffman.decompress(cand) == dec:
+            container = scen.rebuild_container(container, k, cand)
+        if len(container) <= budget:
+            break
+    return container
+
+
+def pack(data, typ):
+    """엔트리/섹션을 다시 압축한다 — **진짜 압축기를 먼저 쓴다.**
+
+    `huffman.compress()` 는 전부 리터럴로 내보내서 결과가 원본의 3배쯤 된다.
+    그러면 엔트리가 원래 자리에 안 들어가 파일 끝으로 밀리는데, 그 상태에서
+    게임이 옛 자리를 읽어 원문을 보여 주는 일이 있었다(이슈 #27). 실제로
+    2장 시나리오 s3 는 5,592 -> 15,809 바이트로 부풀어 있었다.
+    compress_real() 은 같은 섹션을 5,608 바이트로 만든다 — 원본과 거의 같다.
+    """
+    # 0x0d/0x8d(레인지 코더)는 다시 압축할 방법이 없다. 그렇다고 typ 을 그대로
+    # 넘기면 compress_real 이 거부해서 **전량 리터럴**로 떨어지는데, 그러면
+    # 엔트리가 4~5배로 부풀어(e1669: 61,524 -> 299,407) 원래 자리에 못 들어가고
+    # 파일 끝으로 밀린다. 게임은 타입 바이트로 코덱을 고르므로 huffman(0x08)로
+    # 바꿔 써도 정상이다 — 진짜 압축기를 태우면 대개 원래 자리에 들어간다
+    # (e1601: 158,396 -> 35,591 <= 슬롯 37,961).
+    ctyp = typ if typ in (0x08, 0x0C) else 0x08
+    try:
+        out = huffman.compress_real(data, ctyp, effort=3)
+        if huffman.decompress(out) == data:
+            return out
+    except Exception:                                      # noqa: BLE001
+        pass
+    return huffman.compress(data, typ=ctyp)                # 안 되면 원래 방식
 
 
 def main():
@@ -100,6 +154,7 @@ def main():
 
     trunc_warnings = []
     trunc_src = [""]
+    wide_warnings = []
 
     def trunc(bs, limit):
         # 잘리면 화면에서 글자가 사라진다. 조용히 넘어가면 번역을 고칠 때
@@ -115,33 +170,22 @@ def main():
         return bytes(out)
 
     def pad_page(enc, opage):
-        """페이지를 원본 바이트 길이에 맞추되, 공백을 **각 줄 끝에** 나눠 넣는다.
+        """페이지를 원본 바이트 길이에 맞춘다 — 채움은 **전각 공백**.
 
-        이 폰트는 고정폭이라 공백 하나가 글자 한 칸을 그대로 차지한다. 그래서
-        모자란 만큼을 페이지 **맨 뒤**에 붙이면, 그 공백들이 마지막 줄을 넘겨
-        대화창 밖으로 흘러 **아무 글자도 없는 빈 페이지**가 한 장 더 생긴다
-        (이슈 #24 "대사창 공백").
-
-        대신 각 줄을 **원본의 같은 줄 길이**까지만 채우면, 한글(2바이트)이
-        원문 한자·가나(2바이트)와 폭이 같고 공백(1바이트)은 그보다 좁으므로
-        어떤 줄도 원본보다 넓어질 수 없다 = 줄이 절대 넘치지 않는다.
+        예전에는 반각 공백(0x20)으로 각 줄을 원본 줄의 **바이트 길이**까지
+        채웠다. 근거는 "공백은 1바이트니 2바이트 글자보다 좁다"였는데, 이
+        폰트는 고정폭이라 **반각 공백도 한 칸을 그대로 차지한다**. 그래서
+        40바이트(20칸) 원문 줄 자리에 30바이트 한글(16칸)을 넣고 10바이트를
+        반각 공백으로 채우면 26칸이 되어 대화창을 넘고, 넘친 만큼이 빈
+        대화창으로 보였다(이슈 #24 재발 · #29). 전각 공백은 2바이트에 한 칸이라
+        원문과 밀도가 같다. 자세한 건 culdcept/pagepad.py 참고.
         """
-        need = len(opage) - len(enc)
-        if need <= 0:
-            return enc
-        # 0x0a 는 SJIS 2바이트 문자의 뒷바이트(0x40~0xfc)로 나올 수 없어 안전하다.
-        klines = bytearray(enc).split(bytes([10]))
-        olines = opage.split(bytes([10]))
-        out = []
-        for i, kl in enumerate(klines):
-            room = len(olines[i]) - len(kl) if i < len(olines) else 0
-            take = max(0, min(room, need))
-            out.append(bytes(kl) + bytes([PAD]) * take)
-            need -= take
-        res = bytes([10]).join(out)
-        if need > 0:                       # 줄 수가 달라 자리가 남으면 뒤에 붙인다
-            res += bytes([PAD]) * need
-        return res if len(res) == len(opage) else enc + bytes([PAD]) * (len(opage) - len(enc))
+        out = pagepad.pad_page(enc, opage)
+        # 원본보다 넓어진 줄은 대화창을 넘겨 빈 페이지를 만든다 — 반드시 알린다.
+        was, now = pagepad.widest(opage), pagepad.widest(out)
+        if now > was:
+            wide_warnings.append((now, was, trunc_src[0]))
+        return out
 
     def pad_fill(view, tokens, syll2code, enc, target):
         """번역 결과를 원문 바이트 길이에 맞춰 **공백(0x20)** 으로 채운다.
@@ -250,7 +294,7 @@ def main():
             img = render_cell(s, w, h)
             glyph = fontmod.render_a4(img, w, h) if bpp == 4 else fontmod.render_1bpp(img, w, h)
             fontmod.write_glyph(fontbuf, soff, bpg, cmap[code], glyph)
-    new_font = huffman.compress(bytes(fontbuf), typ=d.entry_type(FONT_ENTRY))
+    new_font = pack(bytes(fontbuf), d.entry_type(FONT_ENTRY))
     assert huffman.decompress(new_font) == bytes(fontbuf)
 
     # 대사 주입(컨테이너 1946~1958, 페이지 길이보존)
@@ -302,8 +346,8 @@ def main():
                     for pi, opage in enumerate(opages):
                         if kp is not None and pi < len(kp) and kp[pi] != "":
                             enc = encp(kp[pi])
+                            trunc_src[0] = "e%d_s%d.e%d.p%d" % (idx, k, ei, pi)
                             if len(enc) > len(opage):
-                                trunc_src[0] = "e%d_s%d.e%d.p%d" % (idx, k, ei, pi)
                                 enc = trunc(enc, len(opage))
                             region += pad_page(enc, opage)
                         else:
@@ -316,9 +360,10 @@ def main():
                     new_dec = dec[:ts] + bytes(region)
             if new_dec == huffman.decompress(ent[off:off+ln]):
                 continue                                      # 변경 없음 → 건너뜀
-            new_sec = huffman.compress(new_dec, typ=ent[off])
+            new_sec = pack(new_dec, ent[off])
             assert huffman.decompress(new_sec) == new_dec
             cont = scen.rebuild_container(cont, k, new_sec)
+        cont = shrink_container(cont, len(d.entry(idx)))
         d.replace_entry(idx, cont)
 
     # 카드 데이터베이스 + UI + 시작설정(엔트리 1190)
@@ -406,7 +451,7 @@ def main():
                     ui[i:en] = kb + b"\x00"*(en-i-len(kb))
             p = i + 1
     ui = bytearray(apply_missed(bytes(ui), missed_ko.get(str(UI_ENTRY), {})))
-    new_ui = huffman.compress(bytes(ui), typ=d.entry_type(UI_ENTRY))
+    new_ui = pack(bytes(ui), d.entry_type(UI_ENTRY))
     assert huffman.decompress(new_ui) == bytes(ui)
 
     # 캐릭터/전투 대사 블록(엔트리 1849~1945, 직접압축 블롭, 페이지 길이보존)
@@ -431,7 +476,7 @@ def main():
         dec = apply_missed(dec, mm, str(idx))   # 놓친 중간 세그먼트(예: 1849 튜토리얼)
         if ts is None:                # 끝 영역 없는 블롭: missed 만 반영
             if dec != huffman.decompress(ent):
-                new_sec = huffman.compress(dec, typ=ent[0])
+                new_sec = pack(dec, ent[0])
                 assert huffman.decompress(new_sec) == dec
                 d.replace_entry(idx, new_sec)
             continue
@@ -455,7 +500,7 @@ def main():
         if len(region) != len(dec) - ts:
             continue
         new_dec = dec[:ts] + bytes(region)
-        new_sec = huffman.compress(new_dec, typ=ent[0])
+        new_sec = pack(new_dec, ent[0])
         assert huffman.decompress(new_sec) == new_dec
         d.replace_entry(idx, new_sec)
 
@@ -466,6 +511,11 @@ def main():
         # 무엇이 잘렸는지 모르면 고칠 수 없다. 어디서 몇 바이트 넘쳤는지 함께 남긴다.
         for w, l, src, cut in trunc_warnings[:40]:
             print("      +%d  %s" % (w - l, src))
+    if wide_warnings:
+        print("  ! 원본보다 넓어진 줄 %d개 (대화창 넘침·빈 페이지 위험)"
+              % len(wide_warnings))
+        for now, was, src in sorted(wide_warnings, reverse=True)[:40]:
+            print("      %d칸 > 원본 %d칸  %s" % (now, was, src))
     d.replace_entry(FONT_ENTRY, new_font)
     d.replace_entry(UI_ENTRY, new_ui)
     open(args.outfile, "wb").write(d.build())
