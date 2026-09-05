@@ -213,6 +213,7 @@ def main():
     wide_warnings = []
     over_pages = []                      # 대화창 3줄을 넘치는 페이지(--report)
     n_fix = {1: 0, 2: 0, 3: 0}           # 어느 단계로 대화창에 넣었나
+    squeezed = []                        # 예산이 모자라 공백을 지운 문자열
 
     def trunc(bs, limit):
         # 잘리면 화면에서 글자가 사라진다. 조용히 넘어가면 번역을 고칠 때
@@ -301,17 +302,29 @@ def main():
         return bytes(out)
 
     def fit_page(view, tokens, budget):
-        """예산 초과 시: 끝쪽 공백부터 제거 → 그래도 넘으면 안전 절단(문자경계 보존)."""
+        """예산 초과 시: 끝쪽 공백부터 제거 → 그래도 넘으면 안전 절단(문자경계 보존).
+
+        ★ 공백을 지우면 낱말이 들러붙는다 — "백작에겐 원한이" 가 "백작에겐원한이" 로,
+          "더 이상 태어나지 않는다" 가 "더이상태어나지않는다" 로 나온다(이슈 #30).
+          조용히 지우면 번역이 잘못된 것처럼 보이므로 **반드시 보고**한다.
+        """
         enc = cardtext.encode(view, tokens, syll2code)
         if len(enc) <= budget:
             return enc
         s = list(view)
+        dropped = 0
         while len(cardtext.encode("".join(s), tokens, syll2code)) > budget:
             pos = -1
             for j in range(len(s) - 1, -1, -1):
-                if s[j] == " ": pos = j; break
-            if pos < 0: break
+                if s[j] == " ":
+                    pos = j
+                    break
+            if pos < 0:
+                break
             del s[pos]
+            dropped += 1
+        if dropped:
+            squeezed.append((dropped, trunc_src[0], view))
         enc = cardtext.encode("".join(s), tokens, syll2code)
         return enc if len(enc) <= budget else trunc(enc, budget)
 
@@ -601,6 +614,11 @@ def main():
     if any(n_fix.values()):
         print("  대화창에 넣으려고 손댄 페이지: 줄바꿈 %d개 / 공백 승격 %d개 / 둘 다 %d개"
               " (낱말은 그대로)" % (n_fix[1], n_fix[2], n_fix[3]))
+    if squeezed:
+        print("  ! 예산이 모자라 **공백을 지운** 문자열 %d개 (낱말이 들러붙는다)"
+              % len(squeezed))
+        for count, src, view in sorted(squeezed, reverse=True)[:30]:
+            print("      공백 %d개 삭제  %-26s %s" % (count, src, view.replace(chr(10), " / ")[:52]))
     if over_pages:
         print("  ! 대화창(%d칸 x %d줄)을 넘치는 페이지 %d개 — 뒤로 밀려 빈 대화창이 생긴다"
               % (pagepad.BOX, pagepad.ROWS, len(over_pages)))

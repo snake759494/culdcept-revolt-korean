@@ -15,10 +15,19 @@
 
 검사는 다음을 모두 요구한다.
 
-* 원본과 패치본의 엔트리 1190 길이 및 모든 널 구분 오프셋이 동일할 것
+* 원본과 패치본의 엔트리 1190 길이가 같고, **카드 레코드 구간(섹션 s0)** 의 널
+  구분 오프셋이 모두 동일할 것
 * 일본어가 있던 다섯 필드가 모두 바뀌고 고정 완성형 한글 코드를 포함할 것
 * 영문 식별자는 바뀌지 않을 것
 * 필드별 일본어 원문 수와 카드 종류별 수가 알려진 전수 집계와 일치할 것
+
+널 검사를 **s0 로 한정하는 이유**: 게임은 카드 레코드의 필드를 널로 구분해 세면서
+읽으므로, s0 에 널이 하나만 늘어도 뒤 필드가 전부 밀린다. 반면 UI 섹션 s3 의 짧은
+라벨은 **일부러 널로 채운다**(뒤에 공백을 붙이면 고정폭 폰트에서 칸이 벌어져 보인다).
+s3 은 오프셋으로 참조하므로 널이 늘어도 안전하다.
+
+엔트리 전체로 널을 세면 이 정상적인 s3 패딩 때문에 항상 불일치가 나고, 거기서 검사가
+멈춰 **정작 중요한 카드 필드 검사가 한 번도 돌지 않았다**(v2.21~v2.23 내내 그랬다).
 
 게임 데이터나 카드 원문은 출력하거나 저장하지 않는다.
 """
@@ -34,7 +43,7 @@ from collections import Counter
 from pathlib import Path
 
 from culdcept import font as fontmod
-from culdcept import huffman, wansung
+from culdcept import huffman, scen, wansung
 
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -188,8 +197,27 @@ def contains_fixed_hangul(raw: bytes, hangul_codes: set[int]) -> bool:
     return False
 
 
-def null_offsets(data: bytes) -> list[int]:
-    return [index for index, value in enumerate(data) if value == 0]
+def null_offsets(data: bytes, start: int = 0, end: int | None = None) -> list[int]:
+    """[start, end) 안의 널 위치. 범위를 안 주면 전체."""
+    stop = len(data) if end is None else end
+    return [index for index in range(start, stop) if data[index] == 0]
+
+
+def card_region(entry: bytes) -> tuple[int, int]:
+    """카드 레코드가 들어 있는 구간(섹션 s0)의 [시작, 끝).
+
+    섹션을 못 읽으면 전체를 돌려준다(그 경우 예전처럼 전체를 검사한다).
+    """
+    sections = scen.parse_sections(entry) or []
+    if not sections:
+        return 0, len(entry)
+    start, length = sections[0]
+    return start, start + length
+
+
+def segments_before(data: bytes, limit: int) -> int:
+    """오프셋 `limit` 앞에서 끝나는 널 구분 세그먼트의 개수."""
+    return sum(1 for index in range(limit) if data[index] == 0)
 
 
 def sha256_file(path: Path) -> str:
@@ -311,7 +339,7 @@ def audit_cards(original_path: Path, patched_path: Path) -> list[str]:
         print(f"    {category}: {actual}/{expected}")
     print(
         f"[{'O' if original_nulls == patched_nulls else 'X'}] "
-        f"널 구분 오프셋 {len(original_nulls):,}개 동일"
+        f"카드 레코드 구간(s0) 널 구분 오프셋 {len(original_nulls):,}개 동일"
     )
     print(
         f"[O] 카드형 레코드 {len(all_candidates)}개 중 "
