@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import struct
 
 from culdcept import cardtext, font as fontmod, huffman, pagepad, scen, wansung
 from culdcept.dat import Dat
@@ -122,21 +123,6 @@ def _event_budgets(opages, needs):
     return budgets
 
 
-def _cut(data, limit):
-    """글자 경계에서 자른다. 바이트로 자르면 2바이트 글자가 반쪽 나 깨져 보인다."""
-    if len(data) <= limit:
-        return data
-    out, i = bytearray(), 0
-    while i < len(data):
-        step = 3 if data[i] == 0x03 else (2 if 0x81 <= data[i] <= 0xFC and i + 1 < len(data) else 1)
-        if len(out) + step > limit:
-            break
-        out += data[i:i + step]
-        i += step
-    return bytes(out)
-
-
-
 def _pack_best(plain: bytes, prefer: int):
     """같은 내용을 두 코덱으로 눌러 **가장 작은 것**을 돌려준다. 실패하면 None."""
     best = None
@@ -177,13 +163,17 @@ def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, repo
                  if pi < len(pages_ko) and pages_ko[pi] else len(opages[pi])
                  for pi in range(len(opages))]
         buds = _event_budgets(opages, needs)
+        if any(needs[pi] > buds[pi] for pi in range(len(opages))):
+            # 자리에 안 들어가는 페이지가 있으면 **그 이벤트는 통째로 원문으로 둔다.**
+            # 바이트로 잘라 넣으면 문장이 중간에서 끊긴 채 화면에 나온다. 어차피
+            # 자리가 모자라 이벤트를 골라 담는 상황이니, 이건 그냥 안 고르면 된다.
+            region += ev + b"\x00"
+            skipped += 1
+            continue
         for pi, opage in enumerate(opages):
             view = pages_ko[pi] if pi < len(pages_ko) else ""
             if view:
                 enc = cardtext.encode(view, toks[pi], syll2code)
-                if len(enc) > buds[pi]:
-                    enc = _cut(enc, buds[pi])
-                    report.append("  ! 이벤트 %d 페이지 %d 가 길어 잘림" % (ei, pi))
                 # 실행코드는 크기를 못 바꾼다. 반각 공백 채움이 같은 바이트를
                 # **더 잘 압축**되게 하므로(같은 바이트가 이어진다) 먼저 그걸 쓰고,
                 # 그래서 대화창을 넘칠 때만 전각·재줄바꿈으로 바꾼다.
@@ -201,6 +191,61 @@ def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, repo
     return out, done, skipped
 
 
+BASE_VA = 0x100000            # exefs .code 가 올라가는 주소
+
+
+def find_pointer(code, off):
+    """블롭을 가리키는 포인터의 파일 위치. 딱 하나일 때만 돌려준다.
+
+    실행코드는 블롭을 {번호, 주소} 표로 가리키고 **크기 필드는 없다**(블롭 머리에
+    해제 크기가 들어 있고 압축 스트림이 스스로 끝난다). 그래서 포인터만 고치면
+    붙어 있는 블롭들 사이에서 자리를 옮겨 줄 수 있다.
+    """
+    want = struct.pack("<I", off + BASE_VA)
+    hits, at = [], code.find(want)
+    while at >= 0:
+        hits.append(at)
+        at = code.find(want, at + 1)
+    return hits[0] if len(hits) == 1 else None
+
+
+def fit_to_room(blob, dat_dec, ko, syll2code, typ, room, report):
+    """자리 안에 최대한 많은 이벤트를 담는다. (packed, plain, 번역수, 원문수)"""
+    plain, done, skipped = translate(blob, dat_dec, ko, syll2code, report)
+    if plain is None:
+        return None, None, 0, 0
+    packed = _pack_best(plain, typ)
+    if packed is not None and len(packed) <= room:
+        return packed, plain, done, skipped
+    # 안 들어가면 **어떤 이벤트가 압축을 얼마나 키우는지 실제로 재서** 싼 것부터
+    # 담는다. 예전에는 "번역이 원문보다 몇 바이트 늘었나"로 버릴 순서를 정했는데,
+    # 페이지는 원문 길이로 잘리고 채워지므로 그 값은 늘 0 이하라 뜻이 없었다.
+    _ts, events = scen.find_text_region(blob)
+    every = {ei for ei in range(len(events)) if ko.get(str(ei))}
+    junk = []
+    base_plain, base_done, base_skipped = translate(blob, dat_dec, ko, syll2code, junk, every)
+    base = _pack_best(base_plain, typ) if base_plain is not None else None
+    if base is None or len(base) > room:
+        return None, None, 0, 0
+    costs = []
+    for ei in sorted(every):
+        one, _d, _s = translate(blob, dat_dec, ko, syll2code, junk, every - {ei})
+        got = _pack_best(one, typ) if one is not None else None
+        if got is not None:
+            costs.append((len(got) - len(base), ei))
+    costs.sort()
+    keep = set()
+    packed, plain, done, skipped = base, base_plain, base_done, base_skipped
+    for _cost, ei in costs:
+        one, done_t, skipped_t = translate(blob, dat_dec, ko, syll2code, junk,
+                                           every - keep - {ei})
+        got = _pack_best(one, typ) if one is not None else None
+        if got is not None and len(got) <= room:
+            keep.add(ei)
+            packed, plain, done, skipped = got, one, done_t, skipped_t
+    return packed, plain, done, skipped
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="업데이트 실행코드 안의 시나리오 한글화")
     ap.add_argument("--dat", required=True, help="본인의 **원본** CULDCEPT.DAT")
@@ -209,6 +254,10 @@ def main() -> int:
     ap.add_argument("--texts", default="dialogue_ko.json")
     ap.add_argument("--blocks", default="block_ko.json",
                     help="전투 중 캐릭터 대사(낱개 엔트리) 번역")
+    ap.add_argument("--repack", action="store_true",
+                    help="붙어 있는 블롭 사이에서 자리를 옮긴다(포인터를 고친다). "
+                         "지금은 넷 다 여유가 없어 서로 뺏기만 하므로 기본은 꺼 둔다 — "
+                         "실행코드에 안전하게 쓸 수 있는 빈 자리를 찾은 뒤에 켤 것")
     args = ap.parse_args()
 
     dat = Dat(open(args.dat, "rb").read())
@@ -222,8 +271,7 @@ def main() -> int:
     print("DAT 지문 %d개(시나리오 섹션 + 캐릭터 대사 엔트리)" % len(sigs))
 
     code = bytearray(open(args.code, "rb").read())
-    report, patched, i = [], 0, 0
-    seen = set()
+    report, seen, found, i = [], set(), [], 0
     sizes = {len(dec) for cands in sigs.values() for _n, dec in cands}
     sizes |= {n - 2 for n in sizes} | {n + 2 for n in sizes}
     while i < len(code) - 8:
@@ -267,61 +315,78 @@ def main() -> int:
         while pad < 16 and i + room + pad < len(code) and code[i + room + pad] == 0:
             pad += 1
         room += pad          # 블롭 뒤 정렬용 0 바이트까지가 실제로 쓸 수 있는 자리
-        new, done, skipped = translate(blob, dat_dec, texts.get(name, {}), syll2code, report)
-        if new is None:
-            print("  %s +%d: 구조가 맞지 않아 건너뜀" % (name, i))
-            i += room
-            continue
-        packed = None
-        for typ in (code[i], 0x0C, 0x08):
-            try:
-                cand = huffman.compress_real(new, typ, effort=3)
-            except Exception:                           # noqa: BLE001
-                continue
-            if huffman.decompress(cand) == new and (packed is None or len(cand) < len(packed)):
-                packed = cand
-        # 안 들어가면 **어떤 이벤트가 압축을 얼마나 키우는지 실제로 재서** 싼 것부터
-        # 담는다. 예전에는 "번역이 원문보다 몇 바이트 늘었나"로 버릴 순서를 정했는데,
-        # 페이지는 원문 길이로 잘리고 채워지므로 그 값은 늘 0 이하라 순서가 아무 뜻도
-        # 없었다. 그래서 e1949_s6 이 59개 중 2개만 번역된 채 나갔다.
-        if packed is None or len(packed) > room:
-            ts_b, events_b = scen.find_text_region(blob)
-            ko_all = texts.get(name, {})
-            every = {ei for ei in range(len(events_b)) if ko_all.get(str(ei))}
-            junk = []
-            base_plain, _d, _s = translate(blob, dat_dec, ko_all, syll2code, junk, every)
-            base = _pack_best(base_plain, code[i]) if base_plain is not None else None
-            if base is not None and len(base) <= room:
-                costs = []
-                for ei in sorted(every):
-                    one, _d, _s = translate(blob, dat_dec, ko_all, syll2code, junk, every - {ei})
-                    got = _pack_best(one, code[i]) if one is not None else None
-                    if got is not None:
-                        costs.append((len(got) - len(base), ei))
-                costs.sort()
-                keep = set()
-                packed, new = base, base_plain
-                for _cost, ei in costs:
-                    one, done_t, skipped_t = translate(blob, dat_dec, ko_all, syll2code, junk,
-                                                       every - keep - {ei})
-                    got = _pack_best(one, code[i]) if one is not None else None
-                    if got is not None and len(got) <= room:
-                        keep.add(ei)
-                        packed, new, done, skipped = got, one, done_t, skipped_t
-                if len(keep) < len(every):
-                    print("  %s: 자리가 모자라 이벤트 %d개 중 %d개만 번역했다"
-                          % (name, len(every), len(keep)))
-
-        if packed is None or len(packed) > room:
-            print("  %s +%d: 다시 압축한 결과 %s > 자리 %d — 넣지 못함"
-                  % (name, i, len(packed) if packed else "실패", room))
-            i += room
-            continue
-        code[i:i + len(packed)] = packed
-        patched += 1
-        print("  %s +%d: 이벤트 %d개 번역(원문이 바뀐 %d개는 그대로), %d/%d바이트"
-              % (name, i, done, skipped, len(packed), room))
+        found.append({"off": i, "room": room, "name": name, "blob": blob,
+                      "dat": dat_dec, "typ": code[i]})
         i += room
+
+    # ── 붙어 있는 블롭끼리 자리를 나눈다 ────────────────────────────────
+    groups, run = [], []
+    for item in found:
+        if run and run[-1]["off"] + run[-1]["room"] == item["off"]:
+            run.append(item)
+        else:
+            if run:
+                groups.append(run)
+            run = [item]
+    if run:
+        groups.append(run)
+
+    patched = 0
+    for group in groups:
+        pointers = [find_pointer(bytes(code), it["off"]) for it in group]
+        total = sum(it["room"] for it in group)
+        repacking = bool(args.repack) and len(group) >= 2 and all(p is not None for p in pointers)
+        if not repacking:
+            plan = [(it, it["room"]) for it in group]
+        else:
+            # 자리 재분배: 자기 자리에 이미 들어가는 블롭은 그대로 두고, 모자란
+            # 것들끼리 남은 자리를 필요한 만큼 비례해 나눈다.
+            fulls = []
+            for it in group:
+                p, _pl, _d, _s = fit_to_room(it["blob"], it["dat"], texts.get(it["name"], {}),
+                                             syll2code, it["typ"], 1 << 30, [])
+                fulls.append(len(p) if p else it["room"])
+            need = sum(fulls)
+            print("  붙어 있는 블롭 %d개 — 자리 %d, 전부 번역하면 %d (%+d)"
+                  % (len(group), total, need, need - total))
+            if need <= total:
+                plan = [(it, f) for it, f in zip(group, fulls)]
+            else:
+                fixed = [f if f <= it["room"] else None for it, f in zip(group, fulls)]
+                spare = total - sum(f for f in fixed if f is not None)
+                hungry = sum(f for f, x in zip(fulls, fixed) if x is None)
+                plan = []
+                for it, f, x in zip(group, fulls, fixed):
+                    plan.append((it, x if x is not None else max(64, spare * f // hungry)))
+        cursor = group[0]["off"]
+        for (it, room), ptr in zip(plan, pointers):
+            at = cursor if repacking else it["off"]
+            ko = texts.get(it["name"], {})
+            packed, _plain, done, skipped = fit_to_room(it["blob"], it["dat"], ko, syll2code,
+                                                        it["typ"], room, report)
+            if packed is None or len(packed) > room:
+                # 원문 그대로 둔다. 원문이 배정된 자리보다 크면 **자리를 옮기지 않는다** —
+                # 그냥 쓰면 다음 블롭이나 그 뒤 데이터를 덮어쓴다.
+                print("  %s: 자리 %d 에 넣지 못했다 — 원문 그대로 둔다" % (it["name"], room))
+                if at != it["off"] or it["room"] > room:
+                    print("     ! 자리를 옮기던 중이라 이 묶음의 재분배를 취소한다")
+                    return 2
+                packed = bytes(code[it["off"]:it["off"] + it["room"]])
+                done = skipped = 0
+            code[at:at + len(packed)] = packed
+            if repacking and ptr is not None and at != it["off"]:
+                struct.pack_into("<I", code, ptr, at + BASE_VA)
+            _ts, events = scen.find_text_region(it["blob"])
+            print("  %s +%d: 이벤트 %d/%d개 번역, %d/%d바이트%s"
+                  % (it["name"], at, done, len(events), len(packed), room,
+                     " (자리 옮김)" if at != it["off"] else ""))
+            cursor = at + len(packed) if repacking else it["off"] + it["room"]
+            patched += 1
+        if repacking:
+            tail = group[-1]["off"] + group[-1]["room"]
+            if cursor < tail:
+                code[cursor:tail] = bytes(tail - cursor)  # 남은 자리는 0 으로
+
     for line in report[:20]:
         print(line)
     open(args.out, "wb").write(bytes(code))
