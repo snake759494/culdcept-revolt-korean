@@ -37,7 +37,7 @@ BASE_TITLE_ID = "00040000000F5700"
 UPDATE_TITLE_ID = "0004000e000f5700"
 # 게임 업데이트(ver 1.2) 실행코드를 BLZ 해제한 것. 원본과 한글화본의 해시.
 UPDATE_CODE_SHA256 = "4b21f19242488e28b68dffdf29b65f8af32be2a58431a5031edaa8e8c74af6e1"
-UPDATE_CODE_KO_SHA256 = "@@NEW@@"
+UPDATE_CODE_KO_SHA256 = "0a6615dc52db09fde693ddd733d6577b04260e0ff78bc85d1e25006fef36e248"
 # 예전 판으로 만든 실행코드. 카드 텍스트는 **이 파일에서** 읽히므로, 이게 낡으면
 # 카드 오타를 아무리 고쳐도 화면은 그대로다(v2.25 까지 실제로 그랬다).
 KNOWN_UPDATE_CODE_KO = {
@@ -803,8 +803,8 @@ def _check_update_code(user_dir: Path) -> Check:
 # 정상으로 보였다(이슈 #26). 설치 안내가 "본편 CULDCEPT.DAT 은 건드리지 않습니다"
 # 라고 적혀 있어, 릴리즈마다 xdelta 를 다시 적용해야 한다는 걸 놓치기 쉽다.
 # 그래서 SHA-256 으로 **어느 판인지 정확히** 찍어 준다.
-RELEASE_DAT_SHA = "9ccd540e5dd5b2a0d98e1fbb9941cdf1909f74990a883f3c968328f49f6f6f1d"
-RELEASE_NAME = "v2.25"
+RELEASE_DAT_SHA = "a5f266b97446d0e6d96569ab9b7529999f6325b9019f5a5527aab198b0344224"
+RELEASE_NAME = "v2.26"
 KNOWN_DAT_SHA = {
     "82cedc2e6d91ef28b1cf776e7dd0219be5fcefe5b325a980c78dc1107edb8562": "v2.17",
     "d457cd6a2a1cce0955347170d709571f1092805b6a1c52ce7a25976fd0af0f94": "v2.18",
@@ -819,6 +819,7 @@ KNOWN_DAT_SHA = {
     "dc9f7457d04011b659efb7af5dae7b38adf43fb336762348fe61bdc3d1e3ec2f": "v2.22",
     "0c6aeb5c4836382dc4e83832bdb042a784cdf35ea298f676651018ad4c515179": "v2.23",
     "6f9b2f79640ca57394f51e00fbb4f083e5d941fe4be461e2bfcbf4b41e224de1": "v2.24",
+    "9ccd540e5dd5b2a0d98e1fbb9941cdf1909f74990a883f3c968328f49f6f6f1d": "v2.25",
 }
 
 
