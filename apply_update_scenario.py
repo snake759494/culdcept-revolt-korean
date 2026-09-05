@@ -103,6 +103,40 @@ def dat_sections(dat: Dat, block_indices=()):
     return out
 
 
+def _event_budgets(opages, needs):
+    """한 이벤트 안에서 페이지끼리 바이트를 빌려 준다(본편 빌더와 같은 규칙)."""
+    budgets = [len(page) for page in opages]
+    for i in range(len(budgets)):
+        want = needs[i] - budgets[i]
+        for j in range(len(budgets)):
+            if want <= 0:
+                break
+            if j == i:
+                continue
+            can = budgets[j] - needs[j]
+            if can > 0:
+                move = min(can, want)
+                budgets[j] -= move
+                budgets[i] += move
+                want -= move
+    return budgets
+
+
+def _cut(data, limit):
+    """글자 경계에서 자른다. 바이트로 자르면 2바이트 글자가 반쪽 나 깨져 보인다."""
+    if len(data) <= limit:
+        return data
+    out, i = bytearray(), 0
+    while i < len(data):
+        step = 3 if data[i] == 0x03 else (2 if 0x81 <= data[i] <= 0xFC and i + 1 < len(data) else 1)
+        if len(out) + step > limit:
+            break
+        out += data[i:i + step]
+        i += step
+    return bytes(out)
+
+
+
 def _pack_best(plain: bytes, prefer: int):
     """같은 내용을 두 코덱으로 눌러 **가장 작은 것**을 돌려준다. 실패하면 None."""
     best = None
@@ -135,20 +169,26 @@ def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, repo
             if pages_ko is not None:
                 skipped += 1
             continue
-        opages = ev.split(b"\x07")
+        opages = ev.split(b"")
         toks = [cardtext.tokenize(p)[1] for p in opages]
+        # 본편 빌더와 같이 **이벤트 안에서 페이지끼리 자리를 빌려 준다.** 이게 없어서
+        # 번역이 자기 페이지보다 한두 바이트 길면 글자를 잘라 내고 있었다.
+        needs = [len(cardtext.encode(pages_ko[pi], toks[pi], syll2code))
+                 if pi < len(pages_ko) and pages_ko[pi] else len(opages[pi])
+                 for pi in range(len(opages))]
+        buds = _event_budgets(opages, needs)
         for pi, opage in enumerate(opages):
             view = pages_ko[pi] if pi < len(pages_ko) else ""
             if view:
                 enc = cardtext.encode(view, toks[pi], syll2code)
-                if len(enc) > len(opage):
-                    enc = enc[:len(opage)]
+                if len(enc) > buds[pi]:
+                    enc = _cut(enc, buds[pi])
                     report.append("  ! 이벤트 %d 페이지 %d 가 길어 잘림" % (ei, pi))
                 # 실행코드는 크기를 못 바꾼다. 반각 공백 채움이 같은 바이트를
                 # **더 잘 압축**되게 하므로(같은 바이트가 이어진다) 먼저 그걸 쓰고,
                 # 그래서 대화창을 넘칠 때만 전각·재줄바꿈으로 바꾼다.
-                cheap = enc + b" " * (len(opage) - len(enc))
-                region += cheap if pagepad.visual_lines(cheap) <= pagepad.ROWS                     else pagepad.fit(enc, opage)[0]
+                cheap = enc + b" " * (buds[pi] - len(enc))
+                region += cheap if pagepad.visual_lines(cheap) <= pagepad.ROWS else pagepad.fit(enc, bytes(buds[pi]))[0]
             else:
                 region += opage
             if pi < len(opages) - 1:

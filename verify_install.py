@@ -37,7 +37,12 @@ BASE_TITLE_ID = "00040000000F5700"
 UPDATE_TITLE_ID = "0004000e000f5700"
 # 게임 업데이트(ver 1.2) 실행코드를 BLZ 해제한 것. 원본과 한글화본의 해시.
 UPDATE_CODE_SHA256 = "4b21f19242488e28b68dffdf29b65f8af32be2a58431a5031edaa8e8c74af6e1"
-UPDATE_CODE_KO_SHA256 = "ca235c5a162648e08a47caa60b151c39ce8fc02452d7d788f3abd45bc98e52ed"
+UPDATE_CODE_KO_SHA256 = "@@NEW@@"
+# 예전 판으로 만든 실행코드. 카드 텍스트는 **이 파일에서** 읽히므로, 이게 낡으면
+# 카드 오타를 아무리 고쳐도 화면은 그대로다(v2.25 까지 실제로 그랬다).
+KNOWN_UPDATE_CODE_KO = {
+    "ca235c5a162648e08a47caa60b151c39ce8fc02452d7d788f3abd45bc98e52ed": "v2.25 이하",
+}
 # 그 코드 안에서 카드 DB 가 놓인 구간(=엔트리 1190 의 s0 와 같은 길이).
 UPDATE_CARD_DB = (0x308578, 153786)
 DLC_TITLE_ID = "0004008c000f5700"
@@ -770,6 +775,16 @@ def _check_update_code(user_dir: Path) -> Check:
             "게임 업데이트 실행코드",
             "X",
             "오버라이드가 원본 실행코드 그대로입니다 — 카드가 원문으로 나옵니다. 설치.cmd 를 실행하세요.",
+            True,
+        )
+    old = KNOWN_UPDATE_CODE_KO.get(digest)
+    if old is not None:
+        return Check(
+            "게임 업데이트 실행코드",
+            "X",
+            f"{old} 로 만든 실행코드입니다 (현재 릴리즈 = {RELEASE_NAME}). "
+            "★카드 이름·능력은 **이 파일에서** 읽힙니다★ — 낡으면 카드 오타 수정이 "
+            "화면에 안 나옵니다. 새 패키지의 설치.cmd 를 다시 실행하세요.",
             True,
         )
     start, length = UPDATE_CARD_DB
