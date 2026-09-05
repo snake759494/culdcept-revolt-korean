@@ -328,6 +328,36 @@ def main():
         enc = cardtext.encode("".join(s), tokens, syll2code)
         return enc if len(enc) <= budget else trunc(enc, budget)
 
+    def event_budgets(opages, needs):
+        """한 이벤트 안에서 페이지끼리 바이트를 **빌려 준다**.
+
+        번역이 원문 페이지보다 길면 fit_page 가 공백부터 지워 낱말이 들러붙는다
+        ("어디에있든신은지켜보고계신다" — 2,315곳에서 그러고 있었다). 그런데 같은
+        이벤트의 다른 페이지에는 자리가 남는 일이 많다.
+
+        이벤트 **경계는 그대로 두고** 페이지 경계만 옮기므로 바깥은 하나도 안 변한다.
+        페이지는 0x07 로 순서대로 읽히니 안쪽 길이는 바뀌어도 된다. (스크립트에서
+        이벤트 시작 오프셋을 세어 보면 우연보다도 적게 나온다 — 대사는 바이트 위치가
+        아니라 색인으로 참조된다.)
+        """
+        budgets = [len(page) for page in opages]
+        for i in range(len(budgets)):
+            want = needs[i] - budgets[i]
+            for j in range(len(budgets)):
+                if want <= 0:
+                    break
+                if j == i:
+                    continue
+                can = budgets[j] - needs[j]
+                if can <= 0:
+                    continue
+                move = min(can, want)
+                budgets[j] -= move
+                budgets[i] += move
+                want -= move
+        return budgets
+
+
     def apply_missed(dec, mm, label=""):
         """find_text_region 이 놓친 중간 텍스트 세그먼트를 오프셋 기준 제자리 교체.
         각 세그먼트를 페이지(0x07) 단위로 원문 바이트 길이 이하 교체(0x20 패딩)해
@@ -342,13 +372,17 @@ def main():
                 continue
             seg = bytes(dec[off:end])
             opages = seg.split(b"\x07")
+            toks = [cardtext.tokenize(op)[1] for op in opages]
+            needs = [len(cardtext.encode(pages[pi], toks[pi], syll2code))
+                     if pi < len(pages) and pages[pi] != "" else len(opages[pi])
+                     for pi in range(len(opages))]
+            buds = event_budgets(opages, needs)
             newseg = bytearray()
             for pi, opage in enumerate(opages):
                 if pi < len(pages) and pages[pi] != "":
-                    _, tokens = cardtext.tokenize(opage)
                     trunc_src[0] = "missed_ko %s o%s.p%d" % (label, off_str, pi)
-                    enc = fit_page(pages[pi], tokens, len(opage))
-                    newseg += pad_page(enc, opage)
+                    enc = fit_page(pages[pi], toks[pi], buds[pi])
+                    newseg += pad_page(enc, bytes(buds[pi]))
                 else:
                     newseg += opage
                 if pi < len(opages) - 1:
@@ -438,13 +472,17 @@ def main():
                 for ei, ev in enumerate(events):
                     opages = ev.split(b"\x07")
                     kp = evmap.get(str(ei))
+                    needs = [len(encp(kp[pi])) if kp is not None and pi < len(kp)
+                             and kp[pi] != "" else len(opages[pi])
+                             for pi in range(len(opages))]
+                    buds = event_budgets(opages, needs)
                     for pi, opage in enumerate(opages):
                         if kp is not None and pi < len(kp) and kp[pi] != "":
                             enc = encp(kp[pi])
                             trunc_src[0] = "e%d_s%d.e%d.p%d" % (idx, k, ei, pi)
-                            if len(enc) > len(opage):
-                                enc = trunc(enc, len(opage))
-                            region += pad_page(enc, opage)
+                            if len(enc) > buds[pi]:
+                                enc = trunc(enc, buds[pi])
+                            region += pad_page(enc, bytes(buds[pi]))
                         else:
                             region += opage
                         if pi < len(opages) - 1:
@@ -584,12 +622,16 @@ def main():
         for ei, ev in enumerate(events):
             opages = ev.split(b"\x07")
             kp = evs.get(str(ei))
+            toks = [cardtext.tokenize(op)[1] for op in opages]
+            needs = [len(cardtext.encode(kp[pi], toks[pi], syll2code))
+                     if kp is not None and pi < len(kp) and kp[pi] != ""
+                     else len(opages[pi]) for pi in range(len(opages))]
+            buds = event_budgets(opages, needs)
             for pi, opage in enumerate(opages):
                 if kp is not None and pi < len(kp) and kp[pi] != "":
-                    _, tokens = cardtext.tokenize(opage)
                     trunc_src[0] = "block e%d.e%d.p%d" % (idx, ei, pi)
-                    enc = fit_page(kp[pi], tokens, len(opage))
-                    region += pad_page(enc, opage)
+                    enc = fit_page(kp[pi], toks[pi], buds[pi])
+                    region += pad_page(enc, bytes(buds[pi]))
                 else:
                     region += opage
                 if pi < len(opages) - 1:
