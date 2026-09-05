@@ -171,6 +171,9 @@ def main():
     ap.add_argument("--font", default=None)
     ap.add_argument("--report", default=None, metavar="JSON",
                     help="대화창(20칸x3줄)을 넘치는 페이지 목록을 JSON 으로 남긴다")
+    ap.add_argument("--squeezed-report", default=None, metavar="JSON",
+                    help="예산이 모자라 공백을 지운 문자열 **전부**를 JSON 으로 남긴다"
+                         "(화면에서 낱말이 들러붙는 자리. 줄여 쓸 후보 목록)")
     args = ap.parse_args()
 
     ttf = pick_font(args.font)
@@ -673,6 +676,13 @@ def main():
         with open(args.report, "w", encoding="utf-8") as handle:
             json.dump(over_pages, handle, ensure_ascii=False, indent=1)
         print("  넘친 페이지 목록 -> %s" % args.report)
+    if args.squeezed_report:
+        # 화면에서 낱말이 들러붙는 자리를 전부 남긴다. 30개만 찍어서는 고칠 수가 없다.
+        rows = [{"지운공백": count, "어디": src, "본문": view}
+                for count, src, view in sorted(squeezed, reverse=True)]
+        with open(args.squeezed_report, "w", encoding="utf-8") as handle:
+            json.dump(rows, handle, ensure_ascii=False, indent=1)
+        print("  공백을 지운 문자열 목록 %d개 -> %s" % (len(rows), args.squeezed_report))
     d.replace_entry(FONT_ENTRY, new_font)
     d.replace_entry(UI_ENTRY, new_ui)
     open(args.outfile, "wb").write(d.build())
