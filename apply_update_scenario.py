@@ -61,8 +61,16 @@ def compressed_length(data: bytes, offset: int, plain: bytes) -> int:
     return lo
 
 
-def dat_sections(dat: Dat):
-    """{앞머리 32바이트: (이름, 해제된 섹션)} — 실행코드 블롭과 맞춰 보기 위한 지문."""
+def dat_sections(dat: Dat, block_indices=()):
+    """{앞머리 32바이트: [(이름, 해제된 것), …]} — 실행코드 블롭과 맞춰 볼 지문.
+
+    실행코드가 사본을 싣는 것은 시나리오 컨테이너만이 아니다. **전투 중 캐릭터
+    대사**(낱개 엔트리 1869·1870 등)도 통째로 싣고 있어, 번역이 DAT 에 들어가
+    있어도 업데이트를 깐 사람 화면에는 원문이 나온다.
+
+    엔트리 1869 와 1870 은 앞머리 32바이트가 서로 같아서 지문 하나에 후보가 여럿
+    걸린다. 그래서 값을 목록으로 두고, 부르는 쪽에서 실제로 맞춰 보고 고른다.
+    """
     out = {}
     for index in CONTAINERS:
         try:
@@ -78,8 +86,35 @@ def dat_sections(dat: Dat):
             except Exception:                           # noqa: BLE001
                 continue
             if len(dec) >= MIN_BLOB:
-                out.setdefault(bytes(dec[:32]), ("e%d_s%d" % (index, k), dec))
+                out.setdefault(bytes(dec[:32]), []).append(("e%d_s%d" % (index, k), dec))
+    for index in block_indices:
+        try:
+            entry = dat.entry(index)
+        except Exception:                               # noqa: BLE001
+            continue
+        if not entry or entry[0] not in (0x08, 0x0C):
+            continue
+        try:
+            dec = huffman.decompress(entry)
+        except Exception:                               # noqa: BLE001
+            continue
+        if len(dec) >= MIN_BLOB and scen.find_text_region(dec)[0] is not None:
+            out.setdefault(bytes(dec[:32]), []).append((str(index), dec))
     return out
+
+
+def _pack_best(plain: bytes, prefer: int):
+    """같은 내용을 두 코덱으로 눌러 **가장 작은 것**을 돌려준다. 실패하면 None."""
+    best = None
+    for typ in (prefer, 0x0C, 0x08):
+        try:
+            cand = huffman.compress_real(plain, typ, effort=3)
+        except Exception:                               # noqa: BLE001
+            continue
+        if huffman.decompress(cand) == plain and (best is None or len(cand) < len(best)):
+            best = cand
+    return best
+
 
 
 def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, report,
@@ -132,19 +167,24 @@ def main() -> int:
     ap.add_argument("--code", required=True, help="입력 실행코드(카드 DB 가 한글인 것)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--texts", default="dialogue_ko.json")
+    ap.add_argument("--blocks", default="block_ko.json",
+                    help="전투 중 캐릭터 대사(낱개 엔트리) 번역")
     args = ap.parse_args()
 
     dat = Dat(open(args.dat, "rb").read())
     syll2code = wansung.build_fixed_map(
         fontmod.parse_cmap(huffman.decompress(dat.entry(FONT_ENTRY))))
     texts = json.load(open(args.texts, encoding="utf-8"))
-    sigs = dat_sections(dat)
-    print("DAT 시나리오 섹션 지문 %d개" % len(sigs))
+    blocks = json.load(open(args.blocks, encoding="utf-8"))
+    texts = dict(texts)
+    texts.update(blocks)                 # 키가 "e1947_s3" / "1869" 로 겹치지 않는다
+    sigs = dat_sections(dat, sorted(int(k) for k in blocks))
+    print("DAT 지문 %d개(시나리오 섹션 + 캐릭터 대사 엔트리)" % len(sigs))
 
     code = bytearray(open(args.code, "rb").read())
     report, patched, i = [], 0, 0
     seen = set()
-    sizes = {len(dec) for _n, dec in sigs.values()}
+    sizes = {len(dec) for cands in sigs.values() for _n, dec in cands}
     sizes |= {n - 2 for n in sizes} | {n + 2 for n in sizes}
     while i < len(code) - 8:
         if code[i] not in (0x08, 0x0C):
@@ -168,10 +208,19 @@ def main() -> int:
         if len(blob) < MIN_BLOB or bytes(blob[:32]) not in sigs:
             i += 1
             continue
-        name, dat_dec = sigs[bytes(blob[:32])]
-        if name in seen:
+        # 앞머리가 같은 후보가 여럿일 수 있다(1869/1870). 실제로 맞춰 보고 고른다.
+        best = None
+        for cand_name, cand_dec in sigs[bytes(blob[:32])]:
+            if cand_name in seen:
+                continue
+            trial, done_c, _s = translate(blob, cand_dec, texts.get(cand_name, {}),
+                                          syll2code, [])
+            if trial is not None and (best is None or done_c > best[2]):
+                best = (cand_name, cand_dec, done_c)
+        if best is None:
             i += 1
             continue
+        name, dat_dec = best[0], best[1]
         seen.add(name)
         room = compressed_length(bytes(code), i, blob)
         pad = 0
@@ -191,37 +240,38 @@ def main() -> int:
                 continue
             if huffman.decompress(cand) == new and (packed is None or len(cand) < len(packed)):
                 packed = cand
-        # 안 들어가면 **부풀린 이벤트부터** 원문으로 되돌려 최대한 담는다.
+        # 안 들어가면 **어떤 이벤트가 압축을 얼마나 키우는지 실제로 재서** 싼 것부터
+        # 담는다. 예전에는 "번역이 원문보다 몇 바이트 늘었나"로 버릴 순서를 정했는데,
+        # 페이지는 원문 길이로 잘리고 채워지므로 그 값은 늘 0 이하라 순서가 아무 뜻도
+        # 없었다. 그래서 e1949_s6 이 59개 중 2개만 번역된 채 나갔다.
         if packed is None or len(packed) > room:
-            cost = []
             ts_b, events_b = scen.find_text_region(blob)
-            for ei, ev in enumerate(events_b):
-                ko = texts.get(name, {}).get(str(ei))
-                if ko is None:
-                    continue
-                grew = sum(len(cardtext.encode(v, cardtext.tokenize(op)[1], syll2code)) - len(op)
-                           for v, op in zip(ko, ev.split(b"")) if v)
-                cost.append((grew, ei))
-            cost.sort(reverse=True)
-            skip = set()
-            for _grew, ei in cost:
-                skip.add(ei)
-                cand_plain, done, skipped = translate(blob, dat_dec, texts.get(name, {}),
-                                                      syll2code, report, skip)
-                if cand_plain is None:
-                    break
-                trial = None
-                for typ in (code[i], 0x0C, 0x08):
-                    try:
-                        c = huffman.compress_real(cand_plain, typ, effort=3)
-                    except Exception:                   # noqa: BLE001
-                        continue
-                    if huffman.decompress(c) == cand_plain and (trial is None or len(c) < len(trial)):
-                        trial = c
-                if trial is not None and len(trial) <= room:
-                    packed, new = trial, cand_plain
-                    print("  %s: 자리가 모자라 이벤트 %d개는 원문으로 두었다" % (name, len(skip)))
-                    break
+            ko_all = texts.get(name, {})
+            every = {ei for ei in range(len(events_b)) if ko_all.get(str(ei))}
+            junk = []
+            base_plain, _d, _s = translate(blob, dat_dec, ko_all, syll2code, junk, every)
+            base = _pack_best(base_plain, code[i]) if base_plain is not None else None
+            if base is not None and len(base) <= room:
+                costs = []
+                for ei in sorted(every):
+                    one, _d, _s = translate(blob, dat_dec, ko_all, syll2code, junk, every - {ei})
+                    got = _pack_best(one, code[i]) if one is not None else None
+                    if got is not None:
+                        costs.append((len(got) - len(base), ei))
+                costs.sort()
+                keep = set()
+                packed, new = base, base_plain
+                for _cost, ei in costs:
+                    one, done_t, skipped_t = translate(blob, dat_dec, ko_all, syll2code, junk,
+                                                       every - keep - {ei})
+                    got = _pack_best(one, code[i]) if one is not None else None
+                    if got is not None and len(got) <= room:
+                        keep.add(ei)
+                        packed, new, done, skipped = got, one, done_t, skipped_t
+                if len(keep) < len(every):
+                    print("  %s: 자리가 모자라 이벤트 %d개 중 %d개만 번역했다"
+                          % (name, len(every), len(keep)))
+
         if packed is None or len(packed) > room:
             print("  %s +%d: 다시 압축한 결과 %s > 자리 %d — 넣지 못함"
                   % (name, i, len(packed) if packed else "실패", room))

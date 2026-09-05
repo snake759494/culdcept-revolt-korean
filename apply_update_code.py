@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import struct
 import sys
 from pathlib import Path
@@ -55,6 +56,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 FONT_ENTRY, CARD_ENTRY = 1054, 1190
 PAD = 0x20
+FILL = bytes([0x08, 0x40])          # 강조 끄기 — 폭이 0이다
+_ENGLISH_NAME = re.compile(rb"[A-Za-z][A-Za-z0-9 .&!'/():+,\-\n]*\Z")
 # 엔트리 1190 을 풀면 나오는 5섹션 컨테이너의 s0(카드 DB). 업데이트 코드에도
 # 같은 길이로 통째로 들어 있다.
 S0_OFFSET, S0_LENGTH = 0x28, 153786
@@ -109,7 +112,29 @@ def find_card_db(code: bytes, dat: bytes) -> int:
     return -1
 
 
-def _pad_fill(view: str, tokens, syll2code: dict, encoded: bytes, target: int) -> bytes:
+def card_name_ends(region: bytes) -> set:
+    """카드 **표시 이름** 필드가 끝나는 위치(널 자리)를 모은다.
+
+    레코드는 널로 구분된 필드가 이 순서로 이어진다.
+        [표시 이름] [능력] [영문 이름] [플레이버] [용어] [전략]
+    영문 이름(ASCII 만)에서 두 칸 앞이 표시 이름이다. 본편 DAT 쪽
+    apply_korean_full.card_name_offsets() 과 같은 방법이다.
+    """
+    ends = [i for i, b in enumerate(region) if b == 0]
+    names = set()
+    for k in range(2, len(ends) - 3):
+        start = ends[k - 1] + 1
+        raw = region[start:ends[k]]
+        if not (1 <= len(raw) <= 48 and _ENGLISH_NAME.fullmatch(raw)):
+            continue
+        if not any(0x41 <= v <= 0x5A or 0x61 <= v <= 0x7A for v in raw):
+            continue
+        names.add(ends[k - 2])
+    return names
+
+
+def _pad_fill(view: str, tokens, syll2code: dict, encoded: bytes, target: int,
+              is_name: bool = False) -> bytes:
     """남는 자리를 **공백**으로 채운다(널 금지). 제어코드로 끝나면 그 앞에 채운다."""
     need = target - len(encoded)
     if need <= 0:
@@ -123,6 +148,18 @@ def _pad_fill(view: str, tokens, syll2code: dict, encoded: bytes, target: int) -
         padded = cardtext.encode(view[:cut] + " " * need + view[cut:], tokens, syll2code)
         if len(padded) == target:
             return padded
+    if is_name and not tokens:
+        # 이 폰트는 고정폭이라 채움 공백 하나가 글자 한 칸을 그대로 차지한다.
+        # 카드 이름은 배너 같은 다른 문장에 끼워 넣어지므로 그 공백이 그대로 폭이
+        # 되어 "ロア의파이어드레이크␣␣␣␣" 가 배너를 넘기고 ＳＴ/ＨＰ 변환 줄을
+        # 화면 밖으로 밀어낸다(이슈 #28/#32). 본편 DAT 은 v2.24 에서 폭 0 제어코드로
+        # 바꿨는데 이쪽을 같이 안 바꿔, 업데이트를 깐 사람에게는 그대로 남아 있었다.
+        out = bytearray(encoded)
+        if need % 2:                     # 홀수 한 바이트만 공백으로
+            out += bytes([PAD])
+            need -= 1
+        out += FILL * (need // 2)
+        return bytes(out)
     return encoded + bytes([PAD]) * need
 
 
@@ -144,6 +181,7 @@ def patch(code: bytes, start: int, raw2ko: dict, extra: dict, syll2code: dict) -
     out = bytearray(code)
     stats = {"번역": 0, "추가번역": 0, "미일치": 0}
     region = code[start:start + S0_LENGTH]
+    name_ends = card_name_ends(region)
     cursor = 0
     for index in range(len(region)):
         if region[index] != 0:
@@ -160,7 +198,8 @@ def patch(code: bytes, start: int, raw2ko: dict, extra: dict, syll2code: dict) -
                 continue
         _, tokens = cardtext.tokenize(raw)
         encoded = _truncate(cardtext.encode(view, tokens, syll2code), len(raw))
-        body = _pad_fill(view, tokens, syll2code, encoded, len(raw))
+        body = _pad_fill(view, tokens, syll2code, encoded, len(raw),
+                         is_name=index in name_ends)
         if len(body) != len(raw):                    # 길이가 어긋나면 건드리지 않는다
             continue
         out[start + index - len(raw): start + index] = body
