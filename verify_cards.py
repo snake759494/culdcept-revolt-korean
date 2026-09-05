@@ -243,16 +243,33 @@ def audit_cards(original_path: Path, patched_path: Path) -> list[str]:
         len(original) == len(patched),
         f"엔트리 {CARD_ENTRY} 길이 불일치: 원본 {len(original):,} / 패치본 {len(patched):,}",
     )
-    original_nulls = null_offsets(original)
-    patched_nulls = null_offsets(patched)
+    # 널 구분 검사는 **카드 레코드 구간(s0)** 에만 건다. 같은 엔트리의 UI 섹션 s3
+    # 은 짧은 라벨을 널로 채워야 화면에 공백이 안 보이는 자리라, 엔트리 전체로
+    # 검사하면 정상 패치본이 늘 실패로 나온다(그 실패에서 바로 돌아가는 바람에
+    # 정작 중요한 카드 필드 검사가 아예 돌지 않았다).
+    original_start, original_end = card_region(original)
+    patched_start, patched_end = card_region(patched)
+    require(
+        original_end - original_start == patched_end - patched_start,
+        f"카드 레코드 구간(s0) 길이 불일치: "
+        f"원본 {original_end - original_start:,} / "
+        f"패치본 {patched_end - patched_start:,}",
+    )
+    original_nulls = [i - original_start
+                      for i in null_offsets(original, original_start, original_end)]
+    patched_nulls = [i - patched_start
+                     for i in null_offsets(patched, patched_start, patched_end)]
     require(
         original_nulls == patched_nulls,
-        f"엔트리 {CARD_ENTRY} 널 구분 오프셋 불일치: "
+        f"카드 레코드 구간(s0) 널 구분 오프셋 불일치: "
         f"원본 {len(original_nulls):,} / 패치본 {len(patched_nulls):,}",
     )
+    if original_nulls != patched_nulls:
+        return failures
 
-    original_segments = original.split(b"\0")
-    patched_segments = patched.split(b"\0")
+    # 세그먼트 색인도 구간 안에서 매긴다(s3 의 널 개수에 흔들리지 않도록).
+    original_segments = original[original_start:original_end].split(b"\0")
+    patched_segments = patched[patched_start:patched_end].split(b"\0")
     require(
         len(original_segments) == len(patched_segments),
         f"널 세그먼트 수 불일치: 원본 {len(original_segments):,} / "
@@ -266,8 +283,10 @@ def audit_cards(original_path: Path, patched_path: Path) -> list[str]:
         len(records) == EXPECTED_TOTAL,
         f"수집 카드 수 불일치: 기대 {EXPECTED_TOTAL} / 발견 {len(records)}",
     )
+    # CATEGORY_RANGES 는 엔트리 전체 기준 색인이고, records 는 구간 안 색인이다.
+    shift = segments_before(original, original_start)
     category_counts = {
-        category: sum(start <= index <= end for index in records)
+        category: sum(start <= index + shift <= end for index in records)
         for category, _, start, end in CATEGORY_RANGES
     }
     for category, expected, _, _ in CATEGORY_RANGES:
