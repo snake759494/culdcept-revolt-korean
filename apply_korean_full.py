@@ -423,7 +423,7 @@ def main():
             img = render_cell(s, w, h)
             glyph = fontmod.render_a4(img, w, h) if bpp == 4 else fontmod.render_1bpp(img, w, h)
             fontmod.write_glyph(fontbuf, soff, bpg, cmap[code], glyph)
-    new_font = pack(bytes(fontbuf), d.entry_type(FONT_ENTRY))
+    new_font = pack(bytes(fontbuf), d.entry_type(FONT_ENTRY), len(d.entry(FONT_ENTRY)))
     assert huffman.decompress(new_font) == bytes(fontbuf)
 
     # 대사 주입(컨테이너 1946~1958, 페이지 길이보존)
@@ -589,7 +589,7 @@ def main():
                     ui[i:en] = kb + b"\x00"*(en-i-len(kb))
             p = i + 1
     ui = bytearray(apply_missed(bytes(ui), missed_ko.get(str(UI_ENTRY), {})))
-    new_ui = pack(bytes(ui), d.entry_type(UI_ENTRY))
+    new_ui = pack(bytes(ui), d.entry_type(UI_ENTRY), len(d.entry(UI_ENTRY)))
     assert huffman.decompress(new_ui) == bytes(ui)
 
     # 캐릭터/전투 대사 블록(엔트리 1849~1945, 직접압축 블롭, 페이지 길이보존)
@@ -614,7 +614,7 @@ def main():
         dec = apply_missed(dec, mm, str(idx))   # 놓친 중간 세그먼트(예: 1849 튜토리얼)
         if ts is None:                # 끝 영역 없는 블롭: missed 만 반영
             if dec != huffman.decompress(ent):
-                new_sec = pack(dec, ent[0])
+                new_sec = pack(dec, ent[0], len(ent))
                 assert huffman.decompress(new_sec) == dec
                 d.replace_entry(idx, new_sec)
             continue
@@ -642,7 +642,7 @@ def main():
         if len(region) != len(dec) - ts:
             continue
         new_dec = dec[:ts] + bytes(region)
-        new_sec = pack(new_dec, ent[0])
+        new_sec = pack(new_dec, ent[0], len(ent))
         assert huffman.decompress(new_sec) == new_dec
         d.replace_entry(idx, new_sec)
 
