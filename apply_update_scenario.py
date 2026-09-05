@@ -82,7 +82,8 @@ def dat_sections(dat: Dat):
     return out
 
 
-def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, report):
+def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, report,
+              skip=()):
     """블롭의 이벤트를 번역으로 바꾼다 — **DAT 쪽과 바이트가 같은 이벤트만**.
 
     업데이트에서 문구가 바뀐 이벤트는 우리가 번역한 원문과 다르므로 손대지 않는다.
@@ -94,7 +95,7 @@ def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, repo
     region, done, skipped = bytearray(), 0, 0
     for ei, ev in enumerate(events_b):
         pages_ko = pages_by_event.get(str(ei))
-        if pages_ko is None or ev != events_d[ei]:
+        if pages_ko is None or ev != events_d[ei] or ei in skip:
             region += ev + b"\x00"
             if pages_ko is not None:
                 skipped += 1
@@ -143,8 +144,20 @@ def main() -> int:
     code = bytearray(open(args.code, "rb").read())
     report, patched, i = [], 0, 0
     seen = set()
+    sizes = {len(dec) for _n, dec in sigs.values()}
+    sizes |= {n - 2 for n in sizes} | {n + 2 for n in sizes}
     while i < len(code) - 8:
         if code[i] not in (0x08, 0x0C):
+            i += 1
+            continue
+        # 헤더의 **해제 크기**를 먼저 읽어 거른다. 이게 없으면 3MB 를 전부 풀어 보느라
+        # 십수 분이 걸린다(그러다 프로세스가 죽기도 한다).
+        try:
+            declared, _ = huffman.parse_varint(bytes(code), i + 1)
+        except Exception:                               # noqa: BLE001
+            i += 1
+            continue
+        if declared not in sizes:
             i += 1
             continue
         try:
@@ -178,6 +191,37 @@ def main() -> int:
                 continue
             if huffman.decompress(cand) == new and (packed is None or len(cand) < len(packed)):
                 packed = cand
+        # 안 들어가면 **부풀린 이벤트부터** 원문으로 되돌려 최대한 담는다.
+        if packed is None or len(packed) > room:
+            cost = []
+            ts_b, events_b = scen.find_text_region(blob)
+            for ei, ev in enumerate(events_b):
+                ko = texts.get(name, {}).get(str(ei))
+                if ko is None:
+                    continue
+                grew = sum(len(cardtext.encode(v, cardtext.tokenize(op)[1], syll2code)) - len(op)
+                           for v, op in zip(ko, ev.split(b"")) if v)
+                cost.append((grew, ei))
+            cost.sort(reverse=True)
+            skip = set()
+            for _grew, ei in cost:
+                skip.add(ei)
+                cand_plain, done, skipped = translate(blob, dat_dec, texts.get(name, {}),
+                                                      syll2code, report, skip)
+                if cand_plain is None:
+                    break
+                trial = None
+                for typ in (code[i], 0x0C, 0x08):
+                    try:
+                        c = huffman.compress_real(cand_plain, typ, effort=3)
+                    except Exception:                   # noqa: BLE001
+                        continue
+                    if huffman.decompress(c) == cand_plain and (trial is None or len(c) < len(trial)):
+                        trial = c
+                if trial is not None and len(trial) <= room:
+                    packed, new = trial, cand_plain
+                    print("  %s: 자리가 모자라 이벤트 %d개는 원문으로 두었다" % (name, len(skip)))
+                    break
         if packed is None or len(packed) > room:
             print("  %s +%d: 다시 압축한 결과 %s > 자리 %d — 넣지 못함"
                   % (name, i, len(packed) if packed else "실패", room))
