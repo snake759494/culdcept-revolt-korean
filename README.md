@@ -1,5 +1,17 @@
 # 컬드셉트 리볼트 (3DS) — 한글 패치 & CULDCEPT.DAT 툴
 
+> ### 최신판 — v2.26
+>
+> [**릴리즈에서 `culdcept-korean-complete-v2.26.zip` 을 받으세요**](https://github.com/snake759494/culdcept-revolt-korean/releases/latest).
+> 압축을 풀고 `README.txt` 대로 **1단계(xdelta)부터** 진행하면 됩니다.
+> `게임검사.cmd` 가 본편 DAT 과 업데이트 실행코드의 판본을 해시로 확인해 줍니다.
+>
+> 아래 본문은 v1.0 부터의 개발 기록이라 옛 판번호가 그대로 나옵니다. 설치 방법은
+> 패키지 안의 `README.txt` 를 기준으로 보세요.
+>
+> *이 저장소는 이전 계정(정지됨)에 있던 같은 프로젝트를 이어받은 것입니다. 커밋
+> 기록은 그대로이고, 옛 릴리즈 자료는 남아 있지 않습니다.*
+
 **컬드셉트 리볼트**(カルドセプト リボルト, 닌텐도 3DS 일본판, 타이틀 ID
 `00040000000F5700`)의 **전체 스토리 대사 + 카드 데이터베이스 + 캐릭터 전투 대사
 한글 패치**와, 그것을 만들기 위해 `CULDCEPT.DAT` 아카이브를 처음부터 리버스
@@ -163,7 +175,7 @@ python check_running_game.py        # 게임을 켜 둔 상태에서 (배포판�
 ### 가장 쉬운 적용 — v2.9 통합 릴리즈
 
 일반 사용자는 **plaintext DLC 덤프나 파이썬을 준비할 필요가 없습니다.**
-[v2.9 `culdcept-korean-complete-v2.10.zip`](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.10/culdcept-korean-complete-v2.10.zip)에는
+[최신 통합 패키지](https://github.com/snake75949494/culdcept-revolt-korean/releases/latest)에는
 본편 xdelta와 DLC 카탈로그·수정 IPS 108개, 설치·카드 검증기가 함께 들어 있습니다.
 
 1. ZIP을 새 폴더에 압축 해제합니다.
@@ -213,7 +225,7 @@ v2.7 호환 ZIP은 `romfs_ext`를 포함하지 않아 **새 폴더에 설치할 
 이슈 #11의 현상은 v2.5 패키지의 목적과 일치합니다. v2.5는 `ContentInfoArchive_JPN_ja.bin`
 카탈로그만 넣고 `romfs_ext` 직접 리소스 IPS를 제외했으므로, 프리징은 피할 수 있지만
 다이스·맵·퀘스트·북·아바타 화면의 직접 제목은 원문으로 남습니다. DLC 제목까지 바꾸려면
-[v2.9 통합 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.10/culdcept-korean-complete-v2.10.zip)를
+[최신 통합 패키지](https://github.com/snake75949494/culdcept-revolt-korean/releases/latest)를
 받아 본편 xdelta를 적용하고, `load` 폴더를 v2.5 DLC 모드 폴더에 병합하세요.
 
 카드 설명은 DLC에 들어 있지 않고 본편 `CULDCEPT.DAT`의 카드 DB(엔트리 1190)에서

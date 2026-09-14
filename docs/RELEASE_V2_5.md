@@ -2,7 +2,7 @@
 
 이 릴리즈는 이슈 #10의 `SD카드를 확인 중입니다...` 프리징을 분리 진단하기 위한
 카탈로그 전용 호환 패키지입니다. 따라서 이 패키지만 적용하면 부팅은 되더라도 DLC
-직접 리소스 제목이 바뀌지 않습니다. DLC 화면까지 번역하려면 [v2.6 전체 패키지](https://github.com/snake7594/culdcept-revolt-korean/releases/tag/v2.6)를
+직접 리소스 제목이 바뀌지 않습니다. DLC 화면까지 번역하려면 [최신 전체 패키지](https://github.com/snake75949494/culdcept-revolt-korean/releases/latest)를
 사용하세요.
 
 - `ContentInfoArchive_JPN_ja.bin` 카탈로그만 포함합니다.

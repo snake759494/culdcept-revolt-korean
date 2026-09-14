@@ -63,8 +63,8 @@ python build.py 원본/CULDCEPT.DAT 출력/CULDCEPT.DAT \
 
 #### 일반 사용자: v2.9 통합 ZIP
 
-plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [v2.9
-통합 ZIP](https://github.com/snake7594/culdcept-revolt-korean/releases/download/v2.10/culdcept-korean-complete-v2.10.zip)을
+plaintext DLC 덤프는 패치를 다시 만드는 개발자용 자료입니다. 일반 사용자는 [최신
+통합 ZIP](https://github.com/snake75949494/culdcept-revolt-korean/releases/latest)을
 받습니다. 안의 `culdcept-korean.xdelta`를 본인이 추출한 일본판 Rev 2
 `CULDCEPT.DAT`에 적용해 본편 패치본을 만들고, `load` 폴더는 Azahar 사용자 폴더(보통
 `C:\Users\<윈도우 계정>\AppData\Roaming\Azahar\`)에 병합하면 됩니다.
