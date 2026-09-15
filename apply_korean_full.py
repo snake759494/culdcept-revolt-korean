@@ -36,7 +36,6 @@ from opening_ko import UI_KO, SETUP_KO
 FONT_ENTRY, UI_ENTRY = 1054, 1190
 CONTAINERS = list(range(1946, 1959))
 PAD = 0x20
-FILL = b"\x08@"        # 폭 0인 채움 — 강조 끄기 제어코드(원본도 문자열 끝에 쓴다)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_FONTS = [
     os.path.join(_HERE, "fonts", "NanumSquareNeo-cBd.ttf"),
@@ -270,39 +269,37 @@ def main():
                                "본문": enc.decode("cp932", "replace")})
         return out
 
-    def pad_fill(view, tokens, syll2code, enc, target, is_name=False):
-        """번역 결과를 원문 바이트 길이에 맞춰 **폭 0인 제어코드**로 채운다.
+    def pad_fill(view, tokens, syll2code, enc, target):
+        """남는 자리를 **공백(0x20)** 으로 채운다.
 
-        널로 채우면 안 된다: 게임은 카드 레코드의 필드(이름·능력치·영문명·플레이버)를
-        널로 구분해 **세면서** 읽으므로, 널이 하나 늘면 빈 필드가 생겨 뒤 필드가 전부
-        밀린다(이슈 #3). 원본의 널 개수를 그대로 유지해야 한다.
+        널로 채우면 안 된다: 게임은 카드 레코드의 필드(이름·능력·영문명·플레이버)를
+        널로 구분해 **세면서** 읽으므로, 널이 하나 늘면 빈 필드가 생겨 뒤 필드가
+        전부 밀린다(이슈 #3). 원본의 널 개수를 그대로 유지해야 한다.
 
-        그렇다고 공백으로 채우면 이 폰트는 고정폭이라 **공백 하나가 글자 한 칸을
-        그대로 차지한다**. 카드 이름은 다른 문장에 끼워 넣어지므로 그 공백이 그대로
-        폭이 된다. 비술 배너의 "ロア의파이어드레이크"가 뒤 공백 4칸까지 14칸이 되어
-        배너를 넘겼고, 그 바람에 "ＳＴ30→50" 줄이 화면 밖으로 밀려 **빈 줄**로
-        보였다(이슈 #28). 채움이 0칸인 카드(키메라)만 정상으로 보이던 이유다.
+        ★ 문자열이 **줄바꿈 + 제어코드**로 끝나면 채움을 그 **앞쪽에** 넣는다.
+          뒤에 붙이면 그 공백이 한 줄로 렌더돼 "예/아니오" 버튼을 화면 밖으로
+          밀어낸다("이 크리처를 소환하시겠습니까?" 밑의 아니오가 안 보이던 것).
+          v2.24 에서 카드 이름 채움을 넣으면서 이 처리가 사라졌었다.
 
-        0x08 + 인자는 강조를 켜고 끄는 제어코드로 **폭이 0**이다(`0x08 O 글자 @`).
-        원본도 문자열 끝에 `@`(강조 끄기)를 그대로 둔 곳이 e1190 에 10군데 있다.
-        홀수로 한 바이트가 남을 때만 공백 하나를 쓴다.
+        카드 **이름**은 여기서 채우지 않는다. 공백은 배너 폭을 먹고 폭 0 제어코드는
+        손패 목록을 깨뜨린다 — 이름은 cardtext.rebalance_names 가 아예 채우지 않고
+        남는 바이트를 뒤 필드로 넘긴다.
         """
         need = target - len(enc)
         if need <= 0:
             return enc
-        # 폭 0 채움은 압축이 잘 안 된다(같은 바이트가 이어지는 공백과 달리 두 바이트가
-        # 번갈아 나온다). 전부 이걸로 채우면 엔트리 1190 이 327바이트 커져 원래 자리에
-        # 못 들어가고, 그러면 게임이 옛 자리를 읽는 일이 생긴다(이슈 #27/#28).
-        # 그래서 **다른 문장에 끼워 넣어지는 짧은 이름**에만 쓴다. 긴 설명문은 자기
-        # 패널에서 알아서 줄이 바뀌므로 뒤 공백이 보이지 않는다.
-        if not (is_name and not tokens):
-            return enc + bytes([PAD]) * need
-        out = bytearray(enc)
-        if need % 2:                       # 홀수 한 바이트는 공백으로
-            out += bytes([PAD])
-            need -= 1
-        out += FILL * (need // 2)
-        return bytes(out)
+        cut = None
+        for i in range(max(0, len(view) - 12), len(view)):
+            if view[i] == chr(10) and not any("가" <= c <= "힣" for c in view[i:]):
+                cut = i
+                break
+        if cut is not None:
+            padded = cardtext.encode(view[:cut] + " " * need + view[cut:],
+                                     tokens, syll2code)
+            if len(padded) == target:
+                return padded
+        return enc + bytes([PAD]) * need
+
 
     def fit_page(view, tokens, budget):
         """예산 초과 시: 끝쪽 공백부터 제거 → 그래도 넘으면 안전 절단(문자경계 보존).
@@ -360,6 +357,39 @@ def main():
                 want -= move
         return budgets
 
+
+    def spread_budgets(orig_lens, needs):
+        """**섹션(끝 영역) 전체**에서 페이지끼리 바이트를 빌려 준다.
+
+        예전에는 한 이벤트 안에서만 빌려 줬다. 그런데 이벤트에 페이지가 하나뿐인
+        일이 많아, 자리가 한두 바이트 모자라면 빌더가 공백을 지워 낱말이 들러붙었다
+        ("조금…… 강하게 해 볼게." -> "조금……강하게해볼게.", 2,277곳).
+
+        이벤트 **경계는 옮겨도 된다** — 끝 영역은 널로 구분된 이벤트를 순서대로
+        읽고(널을 하나 더 넣으면 뒤가 전부 밀리는 것이 그 증거다), 이벤트는 바이트
+        위치가 아니라 색인으로 참조된다(스크립트에서 이벤트 시작 오프셋을 세면
+        우연보다도 적게 나온다). 섹션 전체 길이와 이벤트 개수는 그대로 둔다.
+
+        번역이 없는 페이지는 needs == 원본 길이라 주지도 받지도 않는다.
+        """
+        buds = list(orig_lens)
+        donors = [j for j in range(len(buds)) if buds[j] > needs[j]]
+        di = 0
+        for i in range(len(buds)):
+            want = needs[i] - buds[i]
+            while want > 0 and di < len(donors):
+                j = donors[di]
+                can = buds[j] - needs[j]
+                if can <= 0:
+                    di += 1
+                    continue
+                move = min(can, want)
+                buds[j] -= move
+                buds[i] += move
+                want -= move
+                if buds[j] <= needs[j]:
+                    di += 1
+        return buds
 
     def apply_missed(dec, mm, label=""):
         """find_text_region 이 놓친 중간 텍스트 세그먼트를 오프셋 기준 제자리 교체.
@@ -471,21 +501,31 @@ def main():
             new_dec = dec                                     # 기본값: missed 만 반영
             if ts is not None:
                 evmap = ko.get(f"e{idx}_s{k}", {})
+                # 섹션 전체에서 자리를 빌려 준다(spread_budgets 설명 참고).
+                flat = []
+                for ei, ev in enumerate(events):
+                    kp = evmap.get(str(ei))
+                    for pi, op in enumerate(ev.split(b"\x07")):
+                        view = kp[pi] if (kp is not None and pi < len(kp)
+                                          and kp[pi] != "") else None
+                        flat.append((op, view))
+                buds = spread_budgets([len(op) for op, _v in flat],
+                                      [len(encp(v)) if v is not None else len(op)
+                                       for op, v in flat])
                 region = bytearray()
+                bi = 0
                 for ei, ev in enumerate(events):
                     opages = ev.split(b"\x07")
-                    kp = evmap.get(str(ei))
-                    needs = [len(encp(kp[pi])) if kp is not None and pi < len(kp)
-                             and kp[pi] != "" else len(opages[pi])
-                             for pi in range(len(opages))]
-                    buds = event_budgets(opages, needs)
                     for pi, opage in enumerate(opages):
-                        if kp is not None and pi < len(kp) and kp[pi] != "":
-                            enc = encp(kp[pi])
+                        _op, view = flat[bi]
+                        bud = buds[bi]
+                        bi += 1
+                        if view is not None:
+                            enc = encp(view)
                             trunc_src[0] = "e%d_s%d.e%d.p%d" % (idx, k, ei, pi)
-                            if len(enc) > buds[pi]:
-                                enc = trunc(enc, buds[pi])
-                            region += pad_page(enc, bytes(buds[pi]))
+                            if len(enc) > bud:
+                                enc = trunc(enc, bud)
+                            region += pad_page(enc, bytes(bud))
                         else:
                             region += opage
                         if pi < len(opages) - 1:
@@ -531,7 +571,6 @@ def main():
             # 렌더돼 예/아니오 버튼을 밀어낸다(이슈 #1). 그래서 pad_fill() 이
             # **제어코드 앞쪽에** 채워 넣는다.
             body = pad_fill(view, tokens, syll2code, enc, len(raw))
-            body_name = pad_fill(view, tokens, syll2code, enc, len(raw), is_name=True)
             # UI 섹션(s3)의 **토큰·줄바꿈 없는 짧은 라벨**은 널로 채운다.
             # 이런 라벨은 다른 문장 안에 그대로 끼워 넣어지므로("맵이나 <셉터> 등"),
             # 뒤에 붙은 공백이 고정폭 폰트에서 글자 칸만큼 벌어져 보인다(이슈 #24).
@@ -545,8 +584,18 @@ def main():
                 if inline:
                     ui[off:off + len(raw)] = body_nul
                 else:
-                    ui[off:off + len(raw)] = body_name if off in name_offs else body
+                    ui[off:off + len(raw)] = body
                 n_card += 1
+
+    # 카드 이름은 **채우지 않는다.** 남는 바이트는 바로 뒤 필드로 넘긴다.
+    # (공백으로 채우면 배너가 밀리고, 폭 0 제어코드로 채우면 손패 목록이 깨진다 —
+    #  culdcept/cardtext.rebalance_names 의 설명 참고.)
+    if name_offs:
+        name_ends = {ui.find(b"\x00", off) for off in name_offs}
+        name_ends.discard(-1)
+        fixed, moved = cardtext.rebalance_names(bytes(ui), name_ends)
+        ui = bytearray(fixed)
+        print("  카드 이름 채움을 뒤 필드로 넘김: %d개" % moved)
 
     # enum_unique 필터가 놓친 문자열(오프셋 기준). cards_extra_ko.json 참고.
     n_extra = 0
@@ -621,20 +670,30 @@ def main():
                 assert huffman.decompress(new_sec) == dec
                 d.replace_entry(idx, new_sec)
             continue
+        # 섹션 전체에서 자리를 빌려 준다(spread_budgets 설명 참고).
+        flat = []
+        for ei, ev in enumerate(events):
+            kp = evs.get(str(ei))
+            for pi, op in enumerate(ev.split(b"\x07")):
+                view = kp[pi] if (kp is not None and pi < len(kp) and kp[pi] != "") else None
+                flat.append((op, view, cardtext.tokenize(op)[1]))
+        buds = spread_budgets(
+            [len(op) for op, _v, _t in flat],
+            [len(cardtext.encode(v, t, syll2code)) if v is not None else len(op)
+             for op, v, t in flat])
         region = bytearray()
+        bi = 0
         for ei, ev in enumerate(events):
             opages = ev.split(b"\x07")
             kp = evs.get(str(ei))
-            toks = [cardtext.tokenize(op)[1] for op in opages]
-            needs = [len(cardtext.encode(kp[pi], toks[pi], syll2code))
-                     if kp is not None and pi < len(kp) and kp[pi] != ""
-                     else len(opages[pi]) for pi in range(len(opages))]
-            buds = event_budgets(opages, needs)
             for pi, opage in enumerate(opages):
-                if kp is not None and pi < len(kp) and kp[pi] != "":
+                _op, view, toks = flat[bi]
+                bud = buds[bi]
+                bi += 1
+                if view is not None:
                     trunc_src[0] = "block e%d.e%d.p%d" % (idx, ei, pi)
-                    enc = fit_page(kp[pi], toks[pi], buds[pi])
-                    region += pad_page(enc, bytes(buds[pi]))
+                    enc = fit_page(view, toks, bud)
+                    region += pad_page(enc, bytes(bud))
                 else:
                     region += opage
                 if pi < len(opages) - 1:

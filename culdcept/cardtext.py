@@ -102,11 +102,22 @@ def tokenize(raw):
     return "".join(view), tokens
 
 
+NAME_MARK = "{N}"                       # 주인공 이름이 들어가는 자리
+NAME_CODE = bytes([0x03, 0x30, 0x2F])   # 실행 중에 세이브의 이름으로 바뀐다
+
+
 def encode(view_text, tokens, syll2code):
     """번역 뷰(한글+⟦k⟧+\\n) -> 게임 바이트열."""
     out = bytearray(); i = 0; n = len(view_text)
     while i < n:
         ch = view_text[i]
+        if view_text.startswith(NAME_MARK, i):
+            # 이걸 빠뜨리면 화면에 글자 그대로 "{N}" 이 나온다. dialogue_ko.json 이
+            # 이 표기를 쓰는데, 예전에는 apply_korean_full 쪽 인코더만 알고 있어서
+            # 같은 문장을 실행코드에 넣을 때 리터럴이 그대로 들어갔다.
+            out += NAME_CODE
+            i += len(NAME_MARK)
+            continue
         if ch == "\n":
             out.append(0x0a); i += 1
         elif ch == L:
@@ -130,3 +141,55 @@ def encode(view_text, tokens, syll2code):
                 except UnicodeEncodeError:
                     pass
     return bytes(out)
+
+
+def strip_name_fill(name: bytes) -> bytes:
+    """카드 이름 뒤에 우리가 붙인 채움(폭 0 제어코드·공백)을 떼어 낸다."""
+    while True:
+        if name.endswith(b"\x08@"):
+            name = name[:-2]
+        elif name.endswith(b" "):
+            name = name[:-1]
+        else:
+            return name
+
+
+def rebalance_names(region: bytes, name_ends) -> bytes:
+    """카드 **이름 필드를 채우지 않고**, 남는 바이트를 바로 뒤 필드로 넘긴다.
+
+    원본 카드 이름 510개 중 채움이 붙은 것은 **하나도 없다.** 번역이 짧다고 뒤를
+    채우면 어느 쪽으로 채우든 탈이 났다.
+
+    * 공백으로 채우면 고정폭 폰트에서 그 공백이 그대로 폭이 된다. 카드 이름은
+      배너 같은 다른 문장에 끼워 넣어지므로 "ロア의파이어드레이크␣␣␣␣" 가 배너를
+      넘겨 ＳＴ/ＨＰ 변환 줄을 화면 밖으로 밀어냈다.
+    * 폭 0 제어코드(`0x08 @`)로 채우면 배너는 멀쩡해지지만, **손패 목록 렌더러가
+      그 제어코드에 걸린다** — 이름이 통째로 사라지거나, 색이 다음 줄까지 번지거나,
+      글자가 깨진다. 목록 아래로 갈수록 심해진다(상태가 누적된다).
+
+    그래서 채우지 않는다. 이름은 번역한 만큼만 쓰고, 남는 바이트는 **바로 뒤
+    필드(능력)의 꼬리 공백**으로 옮긴다. 능력 설명은 자기 패널에서 줄이 바뀌므로
+    꼬리 공백이 보이지 않고, 원래부터 그렇게 채워 왔다.
+
+    널 **개수**와 레코드 전체 길이는 그대로다. 널 하나가 레코드 안에서 조금
+    앞으로 옮겨질 뿐이다 — 게임은 이 구간을 널 단위로 **순서대로** 읽는다(널을
+    하나 더 넣으면 뒤 필드가 전부 밀리는 것이 그 증거다).
+    """
+    out = bytearray(region)
+    moved = 0
+    for end in sorted(name_ends):
+        start = out.rfind(b"\x00", 0, end) + 1
+        nxt = out.find(b"\x00", end + 1)
+        if nxt < 0:
+            continue
+        name = bytes(out[start:end])
+        body = strip_name_fill(name)
+        if body == name or not body:
+            continue
+        freed = len(name) - len(body)
+        nextfield = bytes(out[end + 1:nxt])
+        out[start:nxt] = body + b"\x00" + nextfield + b" " * freed
+        moved += 1
+    assert len(out) == len(region), "구간 길이가 바뀌었다"
+    assert out.count(b"\x00") == region.count(b"\x00"), "널 개수가 바뀌었다"
+    return bytes(out), moved

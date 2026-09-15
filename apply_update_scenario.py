@@ -31,7 +31,9 @@ DAT 이 아니라 그쪽을 읽는다. 그래서 `CULDCEPT.DAT` 의 해당 섹�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import sys
 import struct
 
@@ -137,6 +139,9 @@ def _pack_best(plain: bytes, prefer: int):
 
 
 
+SAME_MEANING = set()      # 원문이 달라도 번역을 그대로 쓰는 이벤트(SHA-1)
+
+
 def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, report,
               skip=()):
     """블롭의 이벤트를 번역으로 바꾼다 — **DAT 쪽과 바이트가 같은 이벤트만**.
@@ -150,7 +155,10 @@ def translate(blob: bytes, dat_dec: bytes, pages_by_event: dict, syll2code, repo
     region, done, skipped = bytearray(), 0, 0
     for ei, ev in enumerate(events_b):
         pages_ko = pages_by_event.get(str(ei))
-        if pages_ko is None or ev != events_d[ei] or ei in skip:
+        # 업데이트가 원문 오타만 고친 이벤트는 번역을 그대로 쓴다
+        # (update_scenario_ko.json 에 SHA-1 로 적어 둔 것만).
+        same = hashlib.sha1(ev).hexdigest() in SAME_MEANING
+        if pages_ko is None or (ev != events_d[ei] and not same) or ei in skip:
             region += ev + b"\x00"
             if pages_ko is not None:
                 skipped += 1
@@ -252,6 +260,8 @@ def main() -> int:
     ap.add_argument("--code", required=True, help="입력 실행코드(카드 DB 가 한글인 것)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--texts", default="dialogue_ko.json")
+    ap.add_argument("--same-meaning", default="update_scenario_ko.json",
+                    help="원문이 달라도 번역을 그대로 쓸 이벤트 목록")
     ap.add_argument("--blocks", default="block_ko.json",
                     help="전투 중 캐릭터 대사(낱개 엔트리) 번역")
     ap.add_argument("--repack", action="store_true",
@@ -267,6 +277,10 @@ def main() -> int:
     blocks = json.load(open(args.blocks, encoding="utf-8"))
     texts = dict(texts)
     texts.update(blocks)                 # 키가 "e1947_s3" / "1869" 로 겹치지 않는다
+    if os.path.exists(args.same_meaning):
+        with open(args.same_meaning, encoding="utf-8") as handle:
+            SAME_MEANING.update(json.load(handle).get("같은뜻", {}))
+        print("원문이 달라도 번역을 쓰는 이벤트 %d개" % len(SAME_MEANING))
     sigs = dat_sections(dat, sorted(int(k) for k in blocks))
     print("DAT 지문 %d개(시나리오 섹션 + 캐릭터 대사 엔트리)" % len(sigs))
 

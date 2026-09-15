@@ -56,7 +56,6 @@ if hasattr(sys.stdout, "reconfigure"):
 
 FONT_ENTRY, CARD_ENTRY = 1054, 1190
 PAD = 0x20
-FILL = bytes([0x08, 0x40])          # 강조 끄기 — 폭이 0이다
 _ENGLISH_NAME = re.compile(rb"[A-Za-z][A-Za-z0-9 .&!'/():+,\-\n]*\Z")
 # 엔트리 1190 을 풀면 나오는 5섹션 컨테이너의 s0(카드 DB). 업데이트 코드에도
 # 같은 길이로 통째로 들어 있다.
@@ -133,8 +132,7 @@ def card_name_ends(region: bytes) -> set:
     return names
 
 
-def _pad_fill(view: str, tokens, syll2code: dict, encoded: bytes, target: int,
-              is_name: bool = False) -> bytes:
+def _pad_fill(view: str, tokens, syll2code: dict, encoded: bytes, target: int) -> bytes:
     """남는 자리를 **공백**으로 채운다(널 금지). 제어코드로 끝나면 그 앞에 채운다."""
     need = target - len(encoded)
     if need <= 0:
@@ -148,18 +146,6 @@ def _pad_fill(view: str, tokens, syll2code: dict, encoded: bytes, target: int,
         padded = cardtext.encode(view[:cut] + " " * need + view[cut:], tokens, syll2code)
         if len(padded) == target:
             return padded
-    if is_name and not tokens:
-        # 이 폰트는 고정폭이라 채움 공백 하나가 글자 한 칸을 그대로 차지한다.
-        # 카드 이름은 배너 같은 다른 문장에 끼워 넣어지므로 그 공백이 그대로 폭이
-        # 되어 "ロア의파이어드레이크␣␣␣␣" 가 배너를 넘기고 ＳＴ/ＨＰ 변환 줄을
-        # 화면 밖으로 밀어낸다(이슈 #28/#32). 본편 DAT 은 v2.24 에서 폭 0 제어코드로
-        # 바꿨는데 이쪽을 같이 안 바꿔, 업데이트를 깐 사람에게는 그대로 남아 있었다.
-        out = bytearray(encoded)
-        if need % 2:                     # 홀수 한 바이트만 공백으로
-            out += bytes([PAD])
-            need -= 1
-        out += FILL * (need // 2)
-        return bytes(out)
     return encoded + bytes([PAD]) * need
 
 
@@ -198,12 +184,16 @@ def patch(code: bytes, start: int, raw2ko: dict, extra: dict, syll2code: dict) -
                 continue
         _, tokens = cardtext.tokenize(raw)
         encoded = _truncate(cardtext.encode(view, tokens, syll2code), len(raw))
-        body = _pad_fill(view, tokens, syll2code, encoded, len(raw),
-                         is_name=index in name_ends)
+        body = _pad_fill(view, tokens, syll2code, encoded, len(raw))
         if len(body) != len(raw):                    # 길이가 어긋나면 건드리지 않는다
             continue
         out[start + index - len(raw): start + index] = body
         stats[key] += 1
+    # 카드 이름은 **채우지 않는다.** 남는 바이트는 바로 뒤 필드로 넘긴다.
+    # (본편 DAT 과 같은 규칙 — culdcept/cardtext.rebalance_names 의 설명 참고.)
+    fixed, moved = cardtext.rebalance_names(bytes(out[start:start + S0_LENGTH]), name_ends)
+    out[start:start + S0_LENGTH] = fixed
+    stats["이름 재배치"] = moved
     return bytes(out), stats
 
 

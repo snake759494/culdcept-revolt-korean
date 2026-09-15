@@ -197,6 +197,9 @@ def contains_fixed_hangul(raw: bytes, hangul_codes: set[int]) -> bool:
     return False
 
 
+from apply_update_code import card_name_ends   # noqa: E402
+
+
 def null_offsets(data: bytes, start: int = 0, end: int | None = None) -> list[int]:
     """[start, end) 안의 널 위치. 범위를 안 주면 전체."""
     stop = len(data) if end is None else end
@@ -259,13 +262,30 @@ def audit_cards(original_path: Path, patched_path: Path) -> list[str]:
                       for i in null_offsets(original, original_start, original_end)]
     patched_nulls = [i - patched_start
                      for i in null_offsets(patched, patched_start, patched_end)]
+    # 움직여도 되는 널은 **카드 이름을 끝내는 널** 하나뿐이다. 이름은 채우지 않고
+    # 남는 바이트를 뒤 필드로 넘기므로(docs/RULES.md §1) 그 널이 레코드 안에서
+    # 앞으로 온다. 개수와 순서는 그대로여야 한다.
     require(
-        original_nulls == patched_nulls,
-        f"카드 레코드 구간(s0) 널 구분 오프셋 불일치: "
+        len(original_nulls) == len(patched_nulls),
+        f"카드 레코드 구간(s0) 널 개수 불일치: "
         f"원본 {len(original_nulls):,} / 패치본 {len(patched_nulls):,}",
     )
-    if original_nulls != patched_nulls:
+    if len(original_nulls) != len(patched_nulls):
         return failures
+    # card_name_ends 는 잘라 낸 구간 기준 오프셋을 돌려준다(original_nulls 와 같은 기준).
+    movable = set(card_name_ends(original[original_start:original_end]))
+    strayed = [(a, b) for a, b in zip(original_nulls, patched_nulls)
+               if a != b and a not in movable]
+    require(
+        not strayed,
+        f"이름 끝이 아닌 널이 움직였다: {len(strayed)}개 (예: {strayed[:3]})",
+    )
+    if strayed:
+        return failures
+    moved = sum(1 for a, b in zip(original_nulls, patched_nulls) if a != b)
+    for a, b in zip(original_nulls, patched_nulls):
+        require(b <= a or a not in movable,
+                f"이름 끝 널이 뒤로 갔다(채움이 남아 있다): {a} -> {b}")
 
     # 세그먼트 색인도 구간 안에서 매긴다(s3 의 널 개수에 흔들리지 않도록).
     original_segments = original[original_start:original_end].split(b"\0")
@@ -357,8 +377,8 @@ def audit_cards(original_path: Path, patched_path: Path) -> list[str]:
         actual = category_counts[category]
         print(f"    {category}: {actual}/{expected}")
     print(
-        f"[{'O' if original_nulls == patched_nulls else 'X'}] "
-        f"카드 레코드 구간(s0) 널 구분 오프셋 {len(original_nulls):,}개 동일"
+        f"[O] 카드 레코드 구간(s0) 널 {len(original_nulls):,}개 보존"
+        f" (이름 끝 {moved}개가 레코드 안에서 앞으로 이동 — 채움을 뒤 필드로 넘김)"
     )
     print(
         f"[O] 카드형 레코드 {len(all_candidates)}개 중 "
