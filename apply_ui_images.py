@@ -148,6 +148,8 @@ def patch_atlas(data, atlas, ttf):
     blk = 16 if fmt == "etc1a4" else 8
     coff = 8 if fmt == "etc1a4" else 0
     tpr = w // 8
+    if atlas.get("alpha_only"):
+        return patch_alpha_only(data, atlas, ttf)
     orig = decode_rgb(data, ts, w, h, fmt)
     img = orig.copy()
     for lab in atlas["labels"]:
@@ -185,6 +187,36 @@ def patch_atlas(data, atlas, ttf):
                 continue                                  # 안 바뀐 블록은 원본 바이트 유지
             out[o + coff:o + coff + 8] = encode_block(nb)
             changed += 1
+    return bytes(out), changed
+
+
+def patch_alpha_only(data, atlas, ttf):
+    """색은 그대로 두고 **알파에만** 글자를 다시 그린다(글자 모양이 알파에 있는 텍스처)."""
+    ts, w, h = atlas["ts"], atlas["w"], atlas["h"]
+    tpr = w // 8
+    A = decode_alpha(data, ts, w, h)
+    canvas = np.zeros((h, w, 3), np.uint8)
+    canvas[..., 0] = A                      # 기존 알파를 밝기로 놓고 그 위에 그린다
+    canvas[..., 1] = A
+    canvas[..., 2] = A
+    for lab in atlas["labels"]:
+        x0, y0, x1, y1 = lab["erase"]
+        canvas[y0:y1, x0:x1] = 0
+    pil = Image.fromarray(canvas)
+    for lab in atlas["labels"]:
+        lab2 = dict(lab)
+        lab2["color"] = [255, 255, 255]
+        draw(pil, lab2, ttf)
+    newA = np.array(pil)[..., 0]
+    out = bytearray(data)
+    changed = 0
+    for by in range(h // 4):
+        for bx in range(w // 4):
+            o = block_off(ts, bx, by, tpr, 16)
+            blk = encode_alpha(newA[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4])
+            if bytes(out[o:o + 8]) != blk:
+                out[o:o + 8] = blk
+                changed += 1
     return bytes(out), changed
 
 
@@ -271,7 +303,11 @@ def main(in_dat, out_dat, ttf, spec_path=None, dump_dir=None):
         patched, changed = patch_atlas(raw, atlas, ttf)
         if dump_dir:
             os.makedirs(dump_dir, exist_ok=True)
-            rgb = decode_rgb(patched, atlas["ts"], atlas["w"], atlas["h"], atlas["fmt"])
+            if atlas.get("alpha_only"):
+                A = decode_alpha(patched, atlas["ts"], atlas["w"], atlas["h"])
+                rgb = np.dstack([A, A, A])
+            else:
+                rgb = decode_rgb(patched, atlas["ts"], atlas["w"], atlas["h"], atlas["fmt"])
             Image.fromarray(rgb).save(os.path.join(dump_dir, "%s.png" % atlas["name"]))
         _store_blob(d, ent, patched, info)
         total += changed
