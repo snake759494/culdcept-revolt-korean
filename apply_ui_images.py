@@ -36,7 +36,7 @@ import sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from culdcept import dat as datmod, huffman
+from culdcept import dat as datmod, huffman, scen
 from culdcept.etc1 import decode_all_blocks, encode_block
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -92,6 +92,20 @@ def erase(img, lab):
         reg[white] = bg
         img[y0:y1, x0:x1] = reg
         return
+    if lab.get("mode") == "ink":
+        # 퀘스트 제목 배지: 금색 글자 + 어두운 외곽선이 회색 문장 위에 얹혀 있다.
+        # 행 단위로 지우면 문장이 뭉개지므로 글자 픽셀만 골라 주변 중앙값으로 메운다.
+        reg = img[y0:y1, x0:x1].astype(int)
+        r, g, b_ = reg[..., 0], reg[..., 1], reg[..., 2]
+        gold = (r > 140) & (r - b_ > 45)
+        dark = reg.max(axis=2) < 70
+        ink = gold | dark
+        rest = reg[~ink]
+        bg = (np.median(rest.reshape(-1, 3), axis=0) if rest.size else np.array([120, 120, 120])).astype(np.uint8)
+        out = img[y0:y1, x0:x1]
+        out[ink] = bg
+        img[y0:y1, x0:x1] = out
+        return
     cx0, cx1 = lab.get("clean_x", [x0, x1])
     if lab.get("mode") == "row_fill":
         # 행 전체를 배경색(clean_x 구간의 중앙값)으로 덮는다. 라벨이 버튼 폭을
@@ -145,40 +159,124 @@ def patch_atlas(data, atlas, ttf):
 
     out = bytearray(data)
     changed = 0
+    # 알파: 투명 바탕에 글자만 있는 텍스처(배너·목록 제목)는 **글자 모양이 알파에**
+    # 들어 있다. 색만 바꾸면 게임은 옛 일본어 모양대로 오려서 보여 준다. 그래서
+    # 라벨 영역의 알파를 새 글자 밝기로 다시 만든다(alpha: true 인 라벨만).
+    alpha_new = None
+    if fmt == "etc1a4" and any(lab.get("alpha") for lab in atlas["labels"]):
+        alpha_new = decode_alpha(data, ts, w, h)
+        for lab in atlas["labels"]:
+            if not lab.get("alpha"):
+                continue
+            x0, y0, x1, y1 = lab["erase"]
+            lum = new[y0:y1, x0:x1].astype(int).max(axis=2)
+            alpha_new[y0:y1, x0:x1] = np.clip(lum, 0, 255).astype(np.uint8)
     for by in range(h // 4):
         for bx in range(w // 4):
             ob = orig[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4]
             nb = new[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4]
+            o = block_off(ts, bx, by, tpr, blk)
+            if alpha_new is not None:
+                ablk = encode_alpha(alpha_new[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4])
+                if bytes(out[o:o + 8]) != ablk:
+                    out[o:o + 8] = ablk
+                    changed += 1
             if (ob == nb).all():
                 continue                                  # 안 바뀐 블록은 원본 바이트 유지
-            o = block_off(ts, bx, by, tpr, blk) + coff
-            out[o:o + 8] = encode_block(nb)               # 색 블록만 교체(알파 보존)
+            out[o + coff:o + coff + 8] = encode_block(nb)
             changed += 1
     return bytes(out), changed
 
 
-def main(in_dat, out_dat, ttf, spec_path=None):
+def decode_alpha(data, ts, w, h):
+    """ETC1A4 의 A4 알파(블록 앞 8바이트, 니블 = 열 우선)를 (h,w) 로."""
+    tpr = w // 8
+    A = np.zeros((h, w), np.uint8)
+    for by in range(h // 4):
+        for bx in range(w // 4):
+            o = block_off(ts, bx, by, tpr, 16)
+            blk = data[o:o + 8]
+            for i in range(16):
+                nib = (blk[i // 2] >> (4 * (i % 2))) & 0xF
+                A[by * 4 + i % 4, bx * 4 + i // 4] = nib * 17
+    return A
+
+
+def encode_alpha(a4):
+    """(4,4) 알파 -> A4 블록 8바이트(decode_alpha 의 역)."""
+    out = bytearray(8)
+    for i in range(16):
+        nib = int(a4[i % 4, i // 4]) * 15 // 255
+        out[i // 2] |= nib << (4 * (i % 2))
+    return bytes(out)
+
+
+def _load_blob(d, ent, sec):
+    """엔트리(또는 컨테이너 섹션)의 압축해제본과, 되쓰기에 필요한 정보를 돌려준다."""
+    off = struct.unpack_from("<I", d, ent * 8)[0]
+    size = struct.unpack_from("<I", d, ent * 8 + 4)[0]
+    entry = bytes(d[off:off + size])
+    if sec is None:
+        typ = entry[0]
+        if typ not in (0x08, 0x0c):
+            raise SystemExit(f"엔트리 {ent} 타입 0x{typ:02x} 는 지원하지 않습니다(0x08/0x0c 만).")
+        return huffman.decompress(entry), (entry, typ, None)
+    # 시나리오 컨테이너(1946~1958)의 섹션 s0 에 퀘스트 제목 그림이 들어 있다.
+    secs = scen.parse_sections(entry)
+    so, sl = secs[sec]
+    part = entry[so:so + sl]
+    typ = part[0]
+    if typ not in (0x08, 0x0c):
+        raise SystemExit(f"엔트리 {ent} 섹션 {sec} 타입 0x{typ:02x} 는 지원하지 않습니다.")
+    return huffman.decompress(part), (entry, typ, sec)
+
+
+def _store_blob(d, ent, patched, info):
+    entry, typ, sec = info
+    enc = huffman.pack_smallest(patched, typ)
+    assert huffman.decompress(enc) == patched, "재압축 왕복 검증 실패"
+    if sec is None:
+        datmod.write_entry(d, ent, enc)
+        return
+    cont = scen.rebuild_container(entry, sec, enc)
+    # 컨테이너가 원래 자리에 안 들어가면 손대지 않은 섹션까지 다시 눌러 넣는다
+    # (밀려나면 게임이 옛 자리를 읽는 일이 있다 — docs/RULES.md §7).
+    size = struct.unpack_from("<I", d, ent * 8 + 4)[0]
+    if len(cont) > size:
+        secs = scen.parse_sections(cont)
+        for k, (o, l) in enumerate(secs):
+            if len(cont) <= size:
+                break
+            if not l or cont[o] not in (0x08, 0x0c) or k == sec:
+                continue
+            try:
+                dec = huffman.decompress(cont[o:o + l])
+                cand = huffman.pack_smallest(dec, cont[o])
+            except Exception:                              # noqa: BLE001
+                continue
+            if len(cand) < l:
+                cont = scen.rebuild_container(cont, k, cand)
+                secs = scen.parse_sections(cont)
+    datmod.write_entry(d, ent, cont)
+
+
+def main(in_dat, out_dat, ttf, spec_path=None, dump_dir=None):
     spec = json.load(open(spec_path or os.path.join(HERE, "ui_images_ko.json"), encoding="utf-8"))
     ttf = find_font(ttf)
     d = bytearray(open(in_dat, "rb").read())
     total = 0
     for atlas in spec["atlases"]:
-        ent = atlas["entry"]
-        off = struct.unpack_from("<I", d, ent * 8)[0]
-        size = struct.unpack_from("<I", d, ent * 8 + 4)[0]
-        typ = struct.unpack("<I", d[off:off + 4])[0] & 0xff
-        if typ not in (0x08, 0x0c):
-            raise SystemExit(f"엔트리 {ent} 타입 0x{typ:02x} 는 지원하지 않습니다(0x08/0x0c 만).")
-        raw = huffman.decompress(bytes(d[off:off + size]))
+        ent, sec = atlas["entry"], atlas.get("sec")
+        raw, info = _load_blob(d, ent, sec)
         patched, changed = patch_atlas(raw, atlas, ttf)
-        # 전량 리터럴로 쓰면 엔트리가 3~5배가 되어 원래 자리에 못 들어가고 파일
-        # 끝으로 밀린다. 밀리면 게임이 옛 자리를 읽는 일이 있어(이슈 #27/#28)
-        # 진짜 압축기로 가장 작게 만들어 되도록 제자리에 넣는다.
-        enc = huffman.pack_smallest(patched, typ)
-        assert huffman.decompress(enc) == patched, "재압축 왕복 검증 실패"
-        datmod.write_entry(d, ent, enc)
+        if dump_dir:
+            os.makedirs(dump_dir, exist_ok=True)
+            rgb = decode_rgb(patched, atlas["ts"], atlas["w"], atlas["h"], atlas["fmt"])
+            Image.fromarray(rgb).save(os.path.join(dump_dir, "%s.png" % atlas["name"]))
+        _store_blob(d, ent, patched, info)
         total += changed
-        print(f"  {atlas['name']:16s} 엔트리 {ent:4d}  라벨 {len(atlas['labels']):2d}개  "
+        tag = f"{ent}.s{sec}" if sec is not None else f"{ent}"
+        print(f"  {atlas['name']:16s} 엔트리 {tag:8s} 라벨 {len(atlas['labels']):2d}개  "
               f"재인코딩 {changed:5d}블록")
     open(out_dat, "wb").write(d)
     print(f"UI 이미지 {len(spec['atlases'])}종 / 총 {total}블록 주입 -> {out_dat}")
@@ -190,5 +288,7 @@ if __name__ == "__main__":
     ap.add_argument("out_dat")
     ap.add_argument("--font", default=DEFAULT_TTF)
     ap.add_argument("--spec", default=None, help="기본: ui_images_ko.json")
+    ap.add_argument("--dump", default=None, metavar="폴더",
+                    help="한글을 그려 넣은 텍스처를 PNG 로도 남긴다(눈으로 확인용)")
     a = ap.parse_args()
-    main(a.in_dat, a.out_dat, a.font, a.spec)
+    main(a.in_dat, a.out_dat, a.font, a.spec, a.dump)

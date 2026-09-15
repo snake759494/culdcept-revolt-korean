@@ -848,6 +848,1940 @@
      "mode": "row_pct"
     }
    ]
+  },
+  {
+   "entry": 735,
+   "ts": 16544,
+   "w": 64,
+   "h": 32,
+   "fmt": "etc1",
+   "name": "shop_exit",
+   "desc": "상점 종료 버튼",
+   "labels": [
+    {
+     "erase": [
+      6,
+      5,
+      58,
+      27
+     ],
+     "text": "종료",
+     "size": 15,
+     "color": [
+      40,
+      40,
+      40
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 745,
+   "ts": 32,
+   "w": 128,
+   "h": 152,
+   "fmt": "etc1",
+   "name": "shop_buy_sell",
+   "desc": "상점 구매/판매",
+   "labels": [
+    {
+     "erase": [
+      10,
+      2,
+      124,
+      28
+     ],
+     "text": "구매",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      100,
+      122
+     ]
+    },
+    {
+     "erase": [
+      10,
+      32,
+      124,
+      58
+     ],
+     "text": "판매",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      100,
+      122
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 746,
+   "ts": 32,
+   "w": 128,
+   "h": 152,
+   "fmt": "etc1",
+   "name": "shop_buy_menu",
+   "desc": "상점 구매 메뉴",
+   "labels": [
+    {
+     "erase": [
+      10,
+      2,
+      124,
+      28
+     ],
+     "text": "카드팩",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      100,
+      122
+     ]
+    },
+    {
+     "erase": [
+      10,
+      62,
+      124,
+      88
+     ],
+     "text": "파츠팩",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      100,
+      122
+     ]
+    },
+    {
+     "erase": [
+      10,
+      122,
+      124,
+      148
+     ],
+     "text": "파츠",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      100,
+      122
+     ]
+    },
+    {
+     "erase": [
+      10,
+      32,
+      86,
+      58
+     ],
+     "text": "북",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      82,
+      90
+     ]
+    },
+    {
+     "erase": [
+      10,
+      92,
+      86,
+      118
+     ],
+     "text": "브리드",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      82,
+      90
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 747,
+   "ts": 32,
+   "w": 128,
+   "h": 152,
+   "fmt": "etc1",
+   "name": "shop_sell_menu",
+   "desc": "상점 판매 메뉴",
+   "labels": [
+    {
+     "erase": [
+      10,
+      2,
+      124,
+      28
+     ],
+     "text": "카드",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      100,
+      122
+     ]
+    },
+    {
+     "erase": [
+      10,
+      32,
+      124,
+      58
+     ],
+     "text": "파츠",
+     "size": 17,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      100,
+      122
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 748,
+   "ts": 32,
+   "w": 128,
+   "h": 152,
+   "fmt": "etc1",
+   "name": "netshop_menu",
+   "desc": "Net상점 메뉴",
+   "labels": [
+    {
+     "erase": [
+      10,
+      2,
+      124,
+      28
+     ],
+     "text": "상품 목록",
+     "size": 15,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      112,
+      122
+     ]
+    },
+    {
+     "erase": [
+      10,
+      32,
+      124,
+      58
+     ],
+     "text": "잔고 관리",
+     "size": 15,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      112,
+      122
+     ]
+    },
+    {
+     "erase": [
+      10,
+      62,
+      124,
+      88
+     ],
+     "text": "다운로드 번호",
+     "size": 15,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      112,
+      122
+     ]
+    },
+    {
+     "erase": [
+      10,
+      92,
+      124,
+      118
+     ],
+     "text": "구입한 상품",
+     "size": 15,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      112,
+      122
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 749,
+   "ts": 6600,
+   "w": 128,
+   "h": 136,
+   "fmt": "etc1a4",
+   "name": "shop_list_dim",
+   "desc": "상점 목록 제목",
+   "labels": [
+    {
+     "erase": [
+      4,
+      1,
+      124,
+      21
+     ],
+     "text": "카드팩",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      23,
+      124,
+      43
+     ],
+     "text": "브리드 파츠",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      45,
+      124,
+      65
+     ],
+     "text": "파츠팩",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      67,
+      124,
+      87
+     ],
+     "text": "구입한 상품",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      89,
+      124,
+      109
+     ],
+     "text": "상품 목록",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      111,
+      124,
+      131
+     ],
+     "text": "매각 파츠",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 750,
+   "ts": 6616,
+   "w": 128,
+   "h": 136,
+   "fmt": "etc1a4",
+   "name": "shop_list",
+   "desc": "상점 목록 제목",
+   "labels": [
+    {
+     "erase": [
+      4,
+      1,
+      124,
+      21
+     ],
+     "text": "카드팩",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      23,
+      124,
+      43
+     ],
+     "text": "브리드 파츠",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      45,
+      124,
+      65
+     ],
+     "text": "파츠팩",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      67,
+      124,
+      87
+     ],
+     "text": "구입한 상품",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      89,
+      124,
+      109
+     ],
+     "text": "상품 목록",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      111,
+      124,
+      131
+     ],
+     "text": "매각 파츠",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 753,
+   "ts": 6480,
+   "w": 128,
+   "h": 136,
+   "fmt": "etc1a4",
+   "name": "shop_list_dim2",
+   "desc": "상점 목록 제목",
+   "labels": [
+    {
+     "erase": [
+      4,
+      1,
+      124,
+      21
+     ],
+     "text": "카드팩",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      23,
+      124,
+      43
+     ],
+     "text": "브리드 파츠",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      45,
+      124,
+      65
+     ],
+     "text": "파츠팩",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      67,
+      124,
+      87
+     ],
+     "text": "구입한 상품",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      89,
+      124,
+      109
+     ],
+     "text": "상품 목록",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      111,
+      124,
+      131
+     ],
+     "text": "매각 파츠",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 797,
+   "ts": 6016,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1a4",
+   "name": "breed_list_dim",
+   "desc": "브리드 목록 제목",
+   "labels": [
+    {
+     "erase": [
+      4,
+      1,
+      124,
+      21
+     ],
+     "text": "브리드 카드",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      23,
+      124,
+      43
+     ],
+     "text": "성장 파츠",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      45,
+      124,
+      65
+     ],
+     "text": "세트 파츠",
+     "size": 15,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 800,
+   "ts": 15312,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1a4",
+   "name": "breed_list",
+   "desc": "브리드 목록 제목",
+   "labels": [
+    {
+     "erase": [
+      4,
+      1,
+      124,
+      21
+     ],
+     "text": "브리드 카드",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      23,
+      124,
+      43
+     ],
+     "text": "성장 파츠",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      4,
+      45,
+      124,
+      65
+     ],
+     "text": "세트 파츠",
+     "size": 15,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 667,
+   "ts": 3792,
+   "w": 128,
+   "h": 80,
+   "fmt": "etc1",
+   "name": "xy_hint",
+   "desc": "X 읽어 주기 / Y 확대 표시",
+   "labels": [
+    {
+     "erase": [
+      44,
+      7,
+      124,
+      31
+     ],
+     "text": "읽어 주기",
+     "size": 15,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      108,
+      124
+     ]
+    },
+    {
+     "erase": [
+      44,
+      43,
+      124,
+      67
+     ],
+     "text": "확대 표시",
+     "size": 15,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "l",
+     "mode": "row_fill",
+     "clean_x": [
+      108,
+      124
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 657,
+   "ts": 8936,
+   "w": 128,
+   "h": 24,
+   "fmt": "etc1a4",
+   "name": "record_title",
+   "desc": "실적 제목",
+   "labels": [
+    {
+     "erase": [
+      4,
+      2,
+      124,
+      20
+     ],
+     "text": "실적",
+     "size": 14,
+     "color": [
+      120,
+      120,
+      120
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      3
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 760,
+   "ts": 32,
+   "w": 64,
+   "h": 104,
+   "fmt": "etc1",
+   "name": "book_tabs",
+   "desc": "북 편집 탭",
+   "labels": [
+    {
+     "erase": [
+      2,
+      1,
+      62,
+      13
+     ],
+     "text": "맵",
+     "size": 11,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      59,
+      63
+     ]
+    },
+    {
+     "erase": [
+      2,
+      15,
+      62,
+      27
+     ],
+     "text": "퀘스트",
+     "size": 11,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      59,
+      63
+     ]
+    },
+    {
+     "erase": [
+      2,
+      29,
+      62,
+      41
+     ],
+     "text": "북",
+     "size": 11,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      59,
+      63
+     ]
+    },
+    {
+     "erase": [
+      2,
+      43,
+      62,
+      55
+     ],
+     "text": "북 커버",
+     "size": 11,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      59,
+      63
+     ]
+    },
+    {
+     "erase": [
+      2,
+      57,
+      62,
+      69
+     ],
+     "text": "아바타",
+     "size": 11,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      59,
+      63
+     ]
+    },
+    {
+     "erase": [
+      2,
+      71,
+      62,
+      83
+     ],
+     "text": "다이스",
+     "size": 11,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      59,
+      63
+     ]
+    },
+    {
+     "erase": [
+      2,
+      85,
+      62,
+      97
+     ],
+     "text": "세트",
+     "size": 11,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "align": "c",
+     "mode": "row_fill",
+     "clean_x": [
+      59,
+      63
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 790,
+   "ts": 32,
+   "w": 128,
+   "h": 128,
+   "fmt": "etc1a4",
+   "name": "stock_panel",
+   "desc": "장수 지정 패널",
+   "labels": [
+    {
+     "erase": [
+      98,
+      0,
+      128,
+      13
+     ],
+     "text": "현재",
+     "size": 10,
+     "color": [
+      210,
+      70,
+      70
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      92,
+      97
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      0,
+      56,
+      42,
+      71
+     ],
+     "text": "뒤로",
+     "size": 12,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      120,
+      128
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 842,
+   "ts": 53072,
+   "w": 64,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "touch_hint",
+   "desc": "터치 안내",
+   "labels": [
+    {
+     "erase": [
+      2,
+      1,
+      62,
+      14
+     ],
+     "text": "터치",
+     "size": 11,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      60,
+      64
+     ],
+     "alpha": true
+    },
+    {
+     "erase": [
+      2,
+      17,
+      62,
+      31
+     ],
+     "text": "터치 재표시",
+     "size": 10,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      60,
+      64
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 959,
+   "ts": 3784,
+   "w": 64,
+   "h": 16,
+   "fmt": "etc1a4",
+   "name": "land_value",
+   "desc": "토지 가치",
+   "labels": [
+    {
+     "erase": [
+      2,
+      1,
+      62,
+      15
+     ],
+     "text": "토지 가치",
+     "size": 11,
+     "color": [
+      160,
+      160,
+      160
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      2
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 1946,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1946",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      68
+     ],
+     "text": "각성",
+     "size": 15,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1947,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1947",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      68
+     ],
+     "text": "반역자들",
+     "size": 15,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1948,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1948",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      68
+     ],
+     "text": "거리\n표류자",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1949,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1949",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      68
+     ],
+     "text": "암약하는\n자",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1950,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1950",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      54
+     ],
+     "text": "혼돈의\n콜로세움",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1951,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1951",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      54
+     ],
+     "text": "인연의 탑",
+     "size": 15,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1952,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1952",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      54
+     ],
+     "text": "제왕의\n자질",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1953,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1953",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      68
+     ],
+     "text": "구세의\n신도",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1954,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1954",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      54
+     ],
+     "text": "평화의\n제전",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1955,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1955",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      54
+     ],
+     "text": "신도와의\n공투",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1956,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1956",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      68
+     ],
+     "text": "잠든\n신들",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1957,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1957",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      54
+     ],
+     "text": "주신의\n자리",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1958,
+   "ts": 32,
+   "w": 128,
+   "h": 72,
+   "fmt": "etc1",
+   "sec": 0,
+   "name": "quest_badge_1958",
+   "desc": "퀘스트 제목 배지",
+   "labels": [
+    {
+     "erase": [
+      6,
+      4,
+      90,
+      54
+     ],
+     "text": "남매를\n넘는 유대",
+     "size": 13,
+     "color": [
+      235,
+      205,
+      120
+     ],
+     "clean_x": [
+      1,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "entry": 1993,
+   "ts": 32,
+   "w": 256,
+   "h": 144,
+   "fmt": "etc1a4",
+   "name": "quest_banner_1993",
+   "desc": "퀘스트 이름 배너",
+   "labels": [
+    {
+     "erase": [
+      2,
+      2,
+      220,
+      139
+     ],
+     "text": "혼돈의\n콜로세움",
+     "size": 34,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      2
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 1994,
+   "ts": 32,
+   "w": 256,
+   "h": 144,
+   "fmt": "etc1a4",
+   "name": "quest_banner_1994",
+   "desc": "퀘스트 이름 배너",
+   "labels": [
+    {
+     "erase": [
+      2,
+      2,
+      220,
+      139
+     ],
+     "text": "인연의 탑",
+     "size": 30,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      2
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 1995,
+   "ts": 32,
+   "w": 256,
+   "h": 144,
+   "fmt": "etc1a4",
+   "name": "quest_banner_1995",
+   "desc": "퀘스트 이름 배너",
+   "labels": [
+    {
+     "erase": [
+      2,
+      2,
+      220,
+      139
+     ],
+     "text": "제왕의 자질",
+     "size": 30,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      2
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 1996,
+   "ts": 32,
+   "w": 256,
+   "h": 144,
+   "fmt": "etc1a4",
+   "name": "quest_banner_1996",
+   "desc": "퀘스트 이름 배너",
+   "labels": [
+    {
+     "erase": [
+      2,
+      2,
+      220,
+      139
+     ],
+     "text": "평화의 제전",
+     "size": 30,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      2
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 1997,
+   "ts": 32,
+   "w": 256,
+   "h": 144,
+   "fmt": "etc1a4",
+   "name": "quest_banner_1997",
+   "desc": "퀘스트 이름 배너",
+   "labels": [
+    {
+     "erase": [
+      2,
+      2,
+      220,
+      139
+     ],
+     "text": "신도와의 공투",
+     "size": 30,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      2
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 1998,
+   "ts": 32,
+   "w": 256,
+   "h": 144,
+   "fmt": "etc1a4",
+   "name": "quest_banner_1998",
+   "desc": "퀘스트 이름 배너",
+   "labels": [
+    {
+     "erase": [
+      2,
+      2,
+      220,
+      139
+     ],
+     "text": "주신의 자리",
+     "size": 30,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      2
+     ],
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 1999,
+   "ts": 32,
+   "w": 256,
+   "h": 144,
+   "fmt": "etc1a4",
+   "name": "quest_banner_1999",
+   "desc": "퀘스트 이름 배너",
+   "labels": [
+    {
+     "erase": [
+      2,
+      2,
+      220,
+      139
+     ],
+     "text": "남매를 넘는 유대",
+     "size": 30,
+     "color": [
+      235,
+      235,
+      235
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      0,
+      2
+     ],
+     "alpha": true
+    }
+   ]
   }
  ]
 }
