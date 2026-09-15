@@ -106,6 +106,10 @@ def erase(img, lab):
         out[ink] = bg
         img[y0:y1, x0:x1] = out
         return
+    if lab.get("mode") == "clear":
+        # 투명 바탕 텍스처: 색을 0으로(알파는 patch_raw 가 지운다)
+        img[y0:y1, x0:x1] = 0
+        return
     cx0, cx1 = lab.get("clean_x", [x0, x1])
     if lab.get("mode") == "row_fill":
         # 행 전체를 배경색(clean_x 구간의 중앙값)으로 덮는다. 라벨이 버튼 폭을
@@ -124,8 +128,8 @@ def erase(img, lab):
             img[yy, x0:x1] = row.astype(np.uint8)
 
 
-def draw(pil, lab, ttf):
-    """한글 렌더."""
+def draw(pil, lab, ttf, mask=None):
+    """한글 렌더. outline 이 있으면 외곽선을 두르고, mask 를 주면 같은 모양을 흰색으로 그린다(알파용)."""
     x0, y0, x1, y1 = lab.get("draw", lab["erase"])
     f = ImageFont.truetype(ttf, lab["size"])
     bb = _m.textbbox((0, 0), lab["text"], font=f)
@@ -139,7 +143,107 @@ def draw(pil, lab, ttf):
     else:
         x = (x0 + x1) // 2 - w // 2 - bb[0]
     y = (y0 + y1) // 2 - h // 2 - bb[1]
-    ImageDraw.Draw(pil).text((x, y), lab["text"], fill=tuple(lab["color"]), font=f)
+    sw = 1 if lab.get("outline") else 0
+    ImageDraw.Draw(pil).text((x, y), lab["text"], fill=tuple(lab["color"]), font=f,
+                             stroke_width=sw, stroke_fill=tuple(lab.get("outline") or (0, 0, 0)))
+    if mask is not None:
+        ImageDraw.Draw(mask).text((x, y), lab["text"], fill=255, font=f, stroke_width=sw, stroke_fill=255)
+
+
+# ── ETC1 이 아닌 형식: 8x8 타일 + 모튼 순서, 픽셀 단위 ─────────────────────
+def _morton(x, y):
+    i = 0
+    for b in range(3):
+        i |= ((x >> b) & 1) << (2 * b)
+        i |= ((y >> b) & 1) << (2 * b + 1)
+    return i
+
+
+_MORTON = [[_morton(x, y) for x in range(8)] for y in range(8)]
+RAW_BPP = {"rgba5551": 2, "rgb565": 2, "la44": 1, "rgba8": 4}
+
+
+def raw_decode(data, ts, w, h, fmt):
+    """(h,w,4) RGBA 로 푼다."""
+    bpp = RAW_BPP[fmt]
+    buf = data[ts:ts + w * h * bpp]
+    px = np.zeros((h, w, 4), np.uint8)
+    tpr = w // 8
+    for ty in range(h // 8):
+        for tx in range(tpr):
+            base = (ty * tpr + tx) * 64
+            for y in range(8):
+                for x in range(8):
+                    i = (base + _MORTON[y][x]) * bpp
+                    if fmt == "rgba8":
+                        a, b, g, r = buf[i], buf[i + 1], buf[i + 2], buf[i + 3]
+                    elif fmt == "la44":
+                        v = buf[i]
+                        l, a = (v >> 4) * 17, (v & 15) * 17
+                        r = g = b = l
+                    else:
+                        v = buf[i] | (buf[i + 1] << 8)
+                        if fmt == "rgba5551":
+                            r, g, b, a = (v >> 11) * 255 // 31, ((v >> 6) & 31) * 255 // 31, ((v >> 1) & 31) * 255 // 31, (v & 1) * 255
+                        else:
+                            r, g, b, a = (v >> 11) * 255 // 31, ((v >> 5) & 63) * 255 // 63, (v & 31) * 255 // 31, 255
+                    px[ty * 8 + y, tx * 8 + x] = (r, g, b, a)
+    return px
+
+
+def raw_encode(px, fmt):
+    h, w = px.shape[:2]
+    bpp = RAW_BPP[fmt]
+    out = bytearray(w * h * bpp)
+    tpr = w // 8
+    for ty in range(h // 8):
+        for tx in range(tpr):
+            base = (ty * tpr + tx) * 64
+            for y in range(8):
+                for x in range(8):
+                    r, g, b, a = (int(v) for v in px[ty * 8 + y, tx * 8 + x])
+                    i = (base + _MORTON[y][x]) * bpp
+                    if fmt == "rgba8":
+                        out[i:i + 4] = bytes((a, b, g, r))
+                    elif fmt == "la44":
+                        l = (r + g + b) // 3
+                        out[i] = ((l * 15 // 255) << 4) | (a * 15 // 255)
+                    elif fmt == "rgba5551":
+                        v = ((r * 31 // 255) << 11) | ((g * 31 // 255) << 6) | ((b * 31 // 255) << 1) | (1 if a >= 128 else 0)
+                        out[i], out[i + 1] = v & 0xFF, v >> 8
+                    else:
+                        v = ((r * 31 // 255) << 11) | ((g * 63 // 255) << 5) | (b * 31 // 255)
+                        out[i], out[i + 1] = v & 0xFF, v >> 8
+    return bytes(out)
+
+
+def patch_raw(data, atlas, ttf):
+    """픽셀 형식 텍스처: RGB 를 지우고 그린 뒤 알파는 새 글자 밝기로(투명 바탕) 또는 그대로."""
+    ts, w, h, fmt = atlas["ts"], atlas["w"], atlas["h"], atlas["fmt"]
+    px = raw_decode(data, ts, w, h, fmt)
+    img = px[..., :3].copy()
+    for lab in atlas["labels"]:
+        erase(img, lab)
+    alpha = px[..., 3].copy()
+    mask = Image.new("L", (w, h), 0)
+    pil = Image.fromarray(img)
+    for lab in atlas["labels"]:
+        if lab.get("alpha"):
+            x0, y0, x1, y1 = lab["erase"]
+            alpha[y0:y1, x0:x1] = 0
+        draw(pil, lab, ttf, mask)
+    new = np.array(pil)
+    m = np.array(mask)
+    for lab in atlas["labels"]:
+        if lab.get("alpha"):
+            x0, y0, x1, y1 = lab["erase"]
+            alpha[y0:y1, x0:x1] = np.maximum(alpha[y0:y1, x0:x1], m[y0:y1, x0:x1])
+    merged = np.dstack([new, alpha])
+    enc = raw_encode(merged, fmt)
+    out = bytearray(data)
+    changed = sum(1 for i in range(0, len(enc), 64) if bytes(out[ts + i:ts + i + 64]) != enc[i:i + 64])
+    out[ts:ts + len(enc)] = enc
+    return bytes(out), changed
 
 
 def patch_atlas(data, atlas, ttf):
@@ -150,14 +254,18 @@ def patch_atlas(data, atlas, ttf):
     tpr = w // 8
     if atlas.get("alpha_only"):
         return patch_alpha_only(data, atlas, ttf)
+    if atlas["fmt"] in RAW_BPP:
+        return patch_raw(data, atlas, ttf)
     orig = decode_rgb(data, ts, w, h, fmt)
     img = orig.copy()
     for lab in atlas["labels"]:
         erase(img, lab)
     pil = Image.fromarray(img)
+    mask = Image.new("L", (w, h), 0)
     for lab in atlas["labels"]:
-        draw(pil, lab, ttf)
+        draw(pil, lab, ttf, mask)
     new = np.array(pil)
+    m = np.array(mask)
 
     out = bytearray(data)
     changed = 0
@@ -171,6 +279,9 @@ def patch_atlas(data, atlas, ttf):
             if not lab.get("alpha"):
                 continue
             x0, y0, x1, y1 = lab["erase"]
+            if lab["alpha"] == "mask":          # 어두운 글자: 밝기 대신 글자 모양(커버리지)을 알파로
+                alpha_new[y0:y1, x0:x1] = m[y0:y1, x0:x1]
+                continue
             lum = new[y0:y1, x0:x1].astype(int).max(axis=2)
             alpha_new[y0:y1, x0:x1] = np.clip(lum, 0, 255).astype(np.uint8)
     for by in range(h // 4):
@@ -306,6 +417,9 @@ def main(in_dat, out_dat, ttf, spec_path=None, dump_dir=None):
             if atlas.get("alpha_only"):
                 A = decode_alpha(patched, atlas["ts"], atlas["w"], atlas["h"])
                 rgb = np.dstack([A, A, A])
+            elif atlas["fmt"] in RAW_BPP:
+                p4 = raw_decode(patched, atlas["ts"], atlas["w"], atlas["h"], atlas["fmt"])
+                rgb = (p4[..., :3].astype(int) * p4[..., 3:4] // 255).astype(np.uint8)
             else:
                 rgb = decode_rgb(patched, atlas["ts"], atlas["w"], atlas["h"], atlas["fmt"])
             Image.fromarray(rgb).save(os.path.join(dump_dir, "%s.png" % atlas["name"]))

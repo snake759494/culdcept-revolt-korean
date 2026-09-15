@@ -2784,6 +2784,322 @@
    ]
   },
   {
+   "entry": 644,
+   "ts": 10264,
+   "w": 64,
+   "h": 72,
+   "fmt": "rgba5551",
+   "name": "battle_labels",
+   "desc": "전투 미리보기 라벨",
+   "labels": [
+    {
+     "erase": [
+      4,
+      0,
+      31,
+      13
+     ],
+     "text": "침략",
+     "size": 10,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "outline": [
+      30,
+      30,
+      60
+     ],
+     "mode": "clear",
+     "alpha": true
+    },
+    {
+     "erase": [
+      34,
+      0,
+      61,
+      13
+     ],
+     "text": "방어",
+     "size": 10,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "outline": [
+      30,
+      30,
+      60
+     ],
+     "mode": "clear",
+     "alpha": true
+    },
+    {
+     "erase": [
+      0,
+      28,
+      33,
+      41
+     ],
+     "text": "능력치",
+     "size": 10,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "outline": [
+      30,
+      30,
+      60
+     ],
+     "mode": "clear",
+     "alpha": true
+    },
+    {
+     "erase": [
+      35,
+      28,
+      62,
+      41
+     ],
+     "text": "합계",
+     "size": 10,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "outline": [
+      30,
+      30,
+      60
+     ],
+     "mode": "clear",
+     "alpha": true
+    },
+    {
+     "erase": [
+      8,
+      42,
+      57,
+      55
+     ],
+     "text": "지형 효과",
+     "size": 10,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "outline": [
+      30,
+      30,
+      60
+     ],
+     "mode": "clear",
+     "alpha": true
+    },
+    {
+     "erase": [
+      8,
+      56,
+      57,
+      69
+     ],
+     "text": "지원 효과",
+     "size": 10,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "outline": [
+      30,
+      30,
+      60
+     ],
+     "mode": "clear",
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 957,
+   "ts": 3860,
+   "w": 64,
+   "h": 32,
+   "fmt": "la44",
+   "name": "round_gain",
+   "desc": "라운드 게인",
+   "labels": [
+    {
+     "erase": [
+      2,
+      2,
+      62,
+      30
+     ],
+     "text": "라운드\n게인",
+     "size": 11,
+     "color": [
+      51,
+      51,
+      51
+     ],
+     "mode": "clear",
+     "alpha": true
+    }
+   ]
+  },
+  {
+   "entry": 710,
+   "ts": 32,
+   "w": 256,
+   "h": 256,
+   "fmt": "etc1a4",
+   "name": "match_recruit",
+   "desc": "대전 모집 버튼",
+   "labels": [
+    {
+     "erase": [
+      10,
+      7,
+      82,
+      38
+     ],
+     "text": "프렌드\n대전",
+     "size": 12,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      5,
+      9
+     ]
+    },
+    {
+     "erase": [
+      30,
+      45,
+      62,
+      57
+     ],
+     "text": "모집",
+     "size": 10,
+     "color": [
+      191,
+      191,
+      203
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      20,
+      30
+     ]
+    },
+    {
+     "erase": [
+      10,
+      71,
+      82,
+      105
+     ],
+     "text": "로컬 통신\n대전",
+     "size": 12,
+     "color": [
+      40,
+      40,
+      40
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      5,
+      9
+     ]
+    },
+    {
+     "erase": [
+      30,
+      110,
+      62,
+      122
+     ],
+     "text": "모집",
+     "size": 10,
+     "color": [
+      191,
+      191,
+      203
+     ],
+     "mode": "row_fill",
+     "clean_x": [
+      20,
+      30
+     ]
+    },
+    {
+     "erase": [
+      118,
+      199,
+      152,
+      212
+     ],
+     "text": "팀",
+     "size": 11,
+     "color": [
+      46,
+      46,
+      46
+     ],
+     "align": "l",
+     "mode": "clear",
+     "alpha": "mask"
+    },
+    {
+     "erase": [
+      118,
+      213,
+      152,
+      226
+     ],
+     "text": "팀",
+     "size": 11,
+     "color": [
+      46,
+      46,
+      46
+     ],
+     "align": "l",
+     "mode": "clear",
+     "alpha": "mask"
+    },
+    {
+     "erase": [
+      153,
+      232,
+      197,
+      246
+     ],
+     "text": "랜덤",
+     "size": 11,
+     "color": [
+      46,
+      46,
+      46
+     ],
+     "align": "l",
+     "mode": "clear",
+     "alpha": "mask"
+    }
+   ]
+  },
+  {
    "entry": 793,
    "ts": 8228,
    "w": 128,
