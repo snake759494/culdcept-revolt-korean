@@ -3218,6 +3218,1098 @@
      "align": "c"
     }
    ]
+  },
+  {
+   "entry": 1594,
+   "ts": 67652,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1594",
+   "desc": "화면 제목 ようこそ",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "환영합니다",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1595,
+   "ts": 126112,
+   "w": 256,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1595",
+   "desc": "화면 제목 最初のブックを選ぼう",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      256,
+      32
+     ],
+     "text": "첫 북을 고르자",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1596,
+   "ts": 107136,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1596",
+   "desc": "화면 제목 オートセーブ",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "오토 세이브",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1597,
+   "ts": 142012,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1597",
+   "desc": "화면 제목 メインメニュー",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "메인 메뉴",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1598,
+   "ts": 113280,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1598",
+   "desc": "화면 제목 クエスト",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "퀘스트",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1599,
+   "ts": 142012,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1599",
+   "desc": "화면 제목 ステージセレクト",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "스테이지 선택",
+     "size": 19,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1600,
+   "ts": 148156,
+   "w": 256,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1600",
+   "desc": "화면 제목 チャレンジクエスト",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      256,
+      32
+     ],
+     "text": "챌린지 퀘스트",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1601,
+   "ts": 148156,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1601",
+   "desc": "화면 제목 ステージ中断",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "스테이지 중단",
+     "size": 19,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1602,
+   "ts": 112300,
+   "w": 256,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1602",
+   "desc": "화면 제목 ステージ再開確認画面",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      256,
+      32
+     ],
+     "text": "스테이지 재개 확인",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1603,
+   "ts": 184040,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1603",
+   "desc": "화면 제목 ステージ打ち切り",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "스테이지 중지",
+     "size": 19,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1604,
+   "ts": 159464,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1604",
+   "desc": "화면 제목 Gp報酬",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "Gp 보상",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1605,
+   "ts": 165608,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1605",
+   "desc": "화면 제목 ひとりで対戦",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "혼자서 대전",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1606,
+   "ts": 143020,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1606",
+   "desc": "화면 제목 対戦室 同盟設定",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "대전실 동맹 설정",
+     "size": 16,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1607,
+   "ts": 129724,
+   "w": 256,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1607",
+   "desc": "화면 제목 対戦室 セプター設定",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      256,
+      32
+     ],
+     "text": "대전실 셉터 설정",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1608,
+   "ts": 130732,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1608",
+   "desc": "화면 제목 ローカル通信対戦",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "로컬 통신 대전",
+     "size": 19,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1609,
+   "ts": 148156,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1609",
+   "desc": "화면 제목 ローカル通信対戦",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "로컬 통신 대전",
+     "size": 19,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1610,
+   "ts": 113280,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1610",
+   "desc": "화면 제목 インターネット",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "인터넷",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1611,
+   "ts": 159464,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1611",
+   "desc": "화면 제목 だれでも対戦",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "누구나 대전",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1612,
+   "ts": 135868,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1612",
+   "desc": "화면 제목 フレンド対戦",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "프렌드 대전",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1614,
+   "ts": 165608,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1614",
+   "desc": "화면 제목 Vブック",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "V북",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1615,
+   "ts": 118444,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1615",
+   "desc": "화면 제목 おまかせブック",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "자동 북",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1616,
+   "ts": 236324,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1616",
+   "desc": "화면 제목 ブック編集",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "북 편집",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1617,
+   "ts": 253776,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1617",
+   "desc": "화면 제목 ブリード",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "브리드",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1618,
+   "ts": 207608,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1618",
+   "desc": "화면 제목 ブリード育成",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "브리드 육성",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1619,
+   "ts": 183032,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1619",
+   "desc": "화면 제목 ブリード戦果",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "브리드 전과",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1620,
+   "ts": 116908,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1620",
+   "desc": "화면 제목 セプター",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "셉터",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1622,
+   "ts": 107136,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1622",
+   "desc": "화면 제목 アルバム",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "앨범",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1623,
+   "ts": 259920,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1623",
+   "desc": "화면 제목 セプタータグ",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "셉터 태그",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1625,
+   "ts": 130732,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1625",
+   "desc": "화면 제목 コメント",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "코멘트",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1626,
+   "ts": 100992,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1626",
+   "desc": "화면 제목 アバター",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "아바타",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1628,
+   "ts": 124540,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1628",
+   "desc": "화면 제목 ショップ",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "샵",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1629,
+   "ts": 130732,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1629",
+   "desc": "화면 제목 Netショップ",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "Net샵",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1630,
+   "ts": 83532,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1630",
+   "desc": "화면 제목 残高管理",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "잔고 관리",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1631,
+   "ts": 94848,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1631",
+   "desc": "화면 제목 ダウンロード番号",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "다운로드 번호",
+     "size": 19,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1632,
+   "ts": 124588,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1632",
+   "desc": "화면 제목 購入した商品",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "구입한 상품",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1634,
+   "ts": 129724,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1634",
+   "desc": "화면 제목 ゲーム設定",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "게임 설정",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1635,
+   "ts": 184040,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1635",
+   "desc": "화면 제목 セプターキー",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "셉터 키",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1636,
+   "ts": 160444,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1636",
+   "desc": "화면 제목 全データクリア",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "전 데이터 클리어",
+     "size": 16,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
+  },
+  {
+   "entry": 1658,
+   "ts": 71244,
+   "w": 128,
+   "h": 32,
+   "fmt": "etc1a4",
+   "name": "title_1658",
+   "desc": "화면 제목 体験版完了",
+   "alpha_only": true,
+   "labels": [
+    {
+     "erase": [
+      0,
+      0,
+      128,
+      32
+     ],
+     "text": "체험판 완료",
+     "size": 22,
+     "color": [
+      255,
+      255,
+      255
+     ],
+     "align": "c"
+    }
+   ]
   }
  ]
 }

@@ -354,6 +354,21 @@ def encode_alpha(a4):
     return bytes(out)
 
 
+_LZ = None
+
+
+def _decode_0d(entry):
+    """0x0d(커스텀 LZMA) 엔트리 디코드 — 게임 code.bin 이 있어야 한다(미배포, 각자 추출)."""
+    global _LZ
+    if _LZ is None:
+        from culdcept.lzma0d import Decoder
+        code = os.path.join(HERE, "code.bin")
+        if not os.path.isfile(code):
+            raise SystemExit("0x0d 엔트리를 풀려면 code.bin 이 필요합니다(docs/HOWTO.md).")
+        _LZ = Decoder(code)
+    return _LZ.decompress(entry)
+
+
 def _load_blob(d, ent, sec):
     """엔트리(또는 컨테이너 섹션)의 압축해제본과, 되쓰기에 필요한 정보를 돌려준다."""
     off = struct.unpack_from("<I", d, ent * 8)[0]
@@ -361,8 +376,12 @@ def _load_blob(d, ent, sec):
     entry = bytes(d[off:off + size])
     if sec is None:
         typ = entry[0]
+        if typ in (0x0d, 0x8d):
+            # 화면 컨테이너(1594~1658)의 제목 텍스처. 0x0d 는 다시 누를 수 없어
+            # 나레이션과 같이 huffman(0x08) 으로 바꿔 쓴다.
+            return _decode_0d(entry), (entry, 0x08, None)
         if typ not in (0x08, 0x0c):
-            raise SystemExit(f"엔트리 {ent} 타입 0x{typ:02x} 는 지원하지 않습니다(0x08/0x0c 만).")
+            raise SystemExit(f"엔트리 {ent} 타입 0x{typ:02x} 는 지원하지 않습니다(0x08/0x0c/0x0d 만).")
         return huffman.decompress(entry), (entry, typ, None)
     # 시나리오 컨테이너(1946~1958)의 섹션 s0 에 퀘스트 제목 그림이 들어 있다.
     secs = scen.parse_sections(entry)
